@@ -1,8 +1,0 @@
-# Minimal build requirements for creating executable
-# Only includes essential dependencies to avoid compatibility issues
-
-pyinstaller>=5.0.0,<7.0.0
-pyinstaller-hooks-contrib>=2023.0
-
-# Include all runtime requirements
--r requirements.txt 
