@@ -1,0 +1,28 @@
+{
+    "GEMINI_API_KEY": "your_gemini_api_key_here",
+    "MAX_RESPONSE_CONTEXT": 128000,
+    "OPENROUTER_API_KEY": "your_openrouter_api_key_here",
+    "RAG_ULTRA_SAFE_MODE": false,
+    "RAG_SAFE_RETRIEVAL_MODE": false,
+    "EMBEDDING_DEVICE": "auto",
+    "RAG_N_RESULTS": 30,
+    "RAG_ALPHA": 0.7,
+    "RAG_IMPORTANCE_SCORE": 0.1,
+    "RAG_TOKEN_LIMIT": 8000,
+    "RAG_RERANKING": true,
+    "RAG_CROSS_ENCODER_RERANKING": true,
+    "RAG_QUERY_EXPANSION": true,
+    "RAG_DISABLED": false,
+    "RAG_FAST_INIT": true,
+    "REQUESTY_API_KEY": "your_requesty_api_key_here",
+    "LAST_PROFILE_NAME": "Default Profile",
+    "LAST_PROFILE_IS_EXAMPLE": true,
+    "OPENAI_API_KEY": "your_openai_api_key_here",
+    "ANTHROPIC_API_KEY": "your_anthropic_api_key_here",
+    "GROQ_API_KEY": "your_groq_api_key_here",
+    "GROK_API_KEY": "your_grok_api_key_here",
+    "DEEPSEEK_API_KEY": "your_deepseek_api_key_here",
+    "MCP_SINGLE_PASS_MODE": false
+    "AGENT_CONTEXT_MANAGEMENT": true,
+    "AGENT_CONTEXT_STRATEGY": "intelligent_truncation"
+}

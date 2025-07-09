@@ -1,0 +1,8 @@
+{
+  "ollama_base_url": "http://localhost:11434",
+  "lmstudio_base_url": "http://localhost:1234/v1",
+  "deepseek_base_url": "https://api.deepseek.com",
+  "openrouter_base_url": "https://openrouter.ai/api/v1",
+  "groq_base_url": "https://api.groq.com/openai/v1",
+  "grok_base_url": "https://api.x.ai/v1"
+}

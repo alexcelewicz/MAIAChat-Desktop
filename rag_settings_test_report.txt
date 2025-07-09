@@ -1,0 +1,15 @@
+RAG SETTINGS INTEGRATION TEST REPORT
+==================================================
+Total Tests: 7
+Passed: 6
+Failed: 1
+Warnings: 0
+
+Detailed Results:
+PASS Load Current Settings: PASS - All settings loaded successfully
+PASS Dialog Initialization: PASS - Dialog initialized successfully
+PASS Preset Buttons: PASS - All presets tested successfully
+PASS Settings Save/Load: PASS - Settings applied correctly
+FAIL Config File Integration: FAIL - 'NoneType' object has no attribute 'get'
+PASS Worker Integration: PASS - Worker integration works correctly
+PASS RAG Status Indicator: PASS - Status indicator logic works correctly

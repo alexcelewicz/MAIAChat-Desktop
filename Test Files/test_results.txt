@@ -1,0 +1,104 @@
+EEEEEE
+======================================================================
+ERROR: test_code_formatting (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_code_formatting
+Traceback (most recent call last):
+  File "C:\Users\voyce\AppData\Local\Programs\Python\Python39\lib\unittest\loader.py", line 436, in _find_test_path
+    module = self._get_module_from_name(name)
+  File "C:\Users\voyce\AppData\Local\Programs\Python\Python39\lib\unittest\loader.py", line 377, in _get_module_from_name
+    __import__(name)
+  File "E:\Vibe_Coding\Python_Agents\test_code_formatting.py", line 7, in <module>
+    from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QTextEdit, QPushButton, QLabel
+ImportError: DLL load failed while importing QtCore: The specified procedure could not be found.
+
+
+======================================================================
+ERROR: test_dynamic_tokens (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_dynamic_tokens
+Traceback (most recent call last):
+  File "C:\Users\voyce\AppData\Local\Programs\Python\Python39\lib\unittest\loader.py", line 436, in _find_test_path
+    module = self._get_module_from_name(name)
+  File "C:\Users\voyce\AppData\Local\Programs\Python\Python39\lib\unittest\loader.py", line 377, in _get_module_from_name
+    __import__(name)
+  File "E:\Vibe_Coding\Python_Agents\test_dynamic_tokens.py", line 10, in <module>
+    from worker import Worker
+  File "E:\Vibe_Coding\Python_Agents\worker.py", line 3, in <module>
+    from PyQt6.QtCore import QObject, pyqtSignal, QMutex, QMutexLocker, Qt
+ImportError: DLL load failed while importing QtCore: The specified procedure could not be found.
+
+
+======================================================================
+ERROR: test_token_tracking (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_token_tracking
+Traceback (most recent call last):
+  File "C:\Users\voyce\AppData\Local\Programs\Python\Python39\lib\unittest\loader.py", line 436, in _find_test_path
+    module = self._get_module_from_name(name)
+  File "C:\Users\voyce\AppData\Local\Programs\Python\Python39\lib\unittest\loader.py", line 377, in _get_module_from_name
+    __import__(name)
+  File "E:\Vibe_Coding\Python_Agents\test_token_tracking.py", line 10, in <module>
+    from worker import Worker
+  File "E:\Vibe_Coding\Python_Agents\worker.py", line 3, in <module>
+    from PyQt6.QtCore import QObject, pyqtSignal, QMutex, QMutexLocker, Qt
+ImportError: DLL load failed while importing QtCore: The specified procedure could not be found.
+
+
+======================================================================
+ERROR: test_unified_response (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_unified_response
+Traceback (most recent call last):
+  File "C:\Users\voyce\AppData\Local\Programs\Python\Python39\lib\unittest\loader.py", line 436, in _find_test_path
+    module = self._get_module_from_name(name)
+  File "C:\Users\voyce\AppData\Local\Programs\Python\Python39\lib\unittest\loader.py", line 377, in _get_module_from_name
+    __import__(name)
+  File "E:\Vibe_Coding\Python_Agents\test_unified_response.py", line 9, in <module>
+    from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QPushButton
+ImportError: DLL load failed while importing QtCore: The specified procedure could not be found.
+
+
+======================================================================
+ERROR: test_validation_fix (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_validation_fix
+Traceback (most recent call last):
+  File "E:\Vibe_Coding\Python_Agents\conversation_manager.py", line 24, in <module>
+    import frontmatter
+ModuleNotFoundError: No module named 'frontmatter'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\voyce\AppData\Local\Programs\Python\Python39\lib\unittest\loader.py", line 436, in _find_test_path
+    module = self._get_module_from_name(name)
+  File "C:\Users\voyce\AppData\Local\Programs\Python\Python39\lib\unittest\loader.py", line 377, in _get_module_from_name
+    __import__(name)
+  File "E:\Vibe_Coding\Python_Agents\test_validation_fix.py", line 10, in <module>
+    from conversation_manager import ConversationManager, MessageValidationRule
+  File "E:\Vibe_Coding\Python_Agents\conversation_manager.py", line 26, in <module>
+    raise ImportError("The 'python-frontmatter' library is required to use the new Markdown format. "
+ImportError: The 'python-frontmatter' library is required to use the new Markdown format. Please install it with: pip install python-frontmatter PyYAML
+
+
+======================================================================
+ERROR: ui (unittest.loader._FailedTest)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: ui
+Traceback (most recent call last):
+  File "C:\Users\voyce\AppData\Local\Programs\Python\Python39\lib\unittest\loader.py", line 470, in _find_test_path
+    package = self._get_module_from_name(name)
+  File "C:\Users\voyce\AppData\Local\Programs\Python\Python39\lib\unittest\loader.py", line 377, in _get_module_from_name
+    __import__(name)
+  File "E:\Vibe_Coding\Python_Agents\ui\__init__.py", line 6, in <module>
+    from .agent_discussion_panel import AgentDiscussionPanel
+  File "E:\Vibe_Coding\Python_Agents\ui\agent_discussion_panel.py", line 6, in <module>
+    from PyQt6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QLabel
+ImportError: DLL load failed while importing QtCore: The specified procedure could not be found.
+
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.000s
+
+FAILED (errors=6)

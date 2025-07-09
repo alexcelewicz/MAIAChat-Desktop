@@ -1,0 +1,15 @@
+{
+  "name": "Single Agent - Code Assistant",
+  "description": "Basic single-agent setup optimized for software development assistance",
+  "agent_count": 1,
+  "knowledge_base_path": "./knowledge_bases/programming",
+  "agents": [
+    {
+      "name": "Code Assistant",
+      "role": "Expert software developer with deep knowledge of programming languages and best practices",
+      "instructions": "Help the user with programming tasks, code reviews, debugging, and software architecture. Provide clear, concise explanations and well-structured code examples.",
+      "model": "openai/gpt-4-turbo",
+      "temperature": 0.2
+    }
+  ]
+}

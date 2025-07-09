@@ -1,0 +1,1930 @@
+# main_window.py - Streaming
+
+import sys
+import json
+import threading
+import os
+from typing import List, Optional
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+                            QTextEdit, QPushButton, QLabel, QSpinBox, QTabWidget,
+                            QFileDialog, QMessageBox, QCheckBox, QSplitter, QSizePolicy, QToolButton,
+                            QListWidget, QListWidgetItem, QAbstractItemView, QMenu, QDialog, QDialogButtonBox,
+                            QScrollArea, QFrame)
+from PyQt6.QtCore import Qt, pyqtSlot, QTimer, QThread, QSize
+from PyQt6.QtGui import QTextCursor, QFont, QIcon
+
+from agent_config import AgentConfig
+from worker import Worker
+from utils import load_config
+from rag_handler import RAGHandler
+from threading import Lock
+from instruction_templates import InstructionTemplates
+from py_to_pdf_converter import py_to_pdf
+from progress_dialog import ProgressDialog
+from cache_manager import CacheManager
+from config_manager import ConfigManager
+from datetime import datetime
+from conversation_manager import ConversationManager
+from pathlib import Path
+from signal_manager import SignalManager
+from knowledge_base import KnowledgeBaseDialog
+from profile_dialog import ProfileDialog
+from profile_manager import profile_manager, Profile, AgentProfile
+
+# Import token counter
+try:
+    from token_counter import token_counter
+except ImportError:
+    token_counter = None
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        # Basic initializations
+        self.worker = None
+        self.thread = None
+        self.worker_lock = Lock()
+        self.agent_configs: List[AgentConfig] = []
+        self.knowledge_base_files: List[str] = []
+        self.loaded_file_content: str = ""
+        self.worker_thread: Optional[threading.Thread] = None
+        self.worker: Optional[Worker] = None
+        self.internet_enabled = False
+        self.signals = SignalManager()
+        self.knowledge_base_content = ""
+        self.conversation_history = []
+        self.current_conversation_id = None
+        self.conversation_manager = ConversationManager()
+        self.update_final_answer_signal = SignalManager().update_final_answer
+        Path("conversation_history").mkdir(exist_ok=True)
+
+        # Token counter display
+        self.token_count_label = QLabel("Tokens: 0 | Cost: $0.00")
+        self.token_count_label.setStyleSheet("font-size: 12px; color: #757575;")
+        self.token_update_timer = QTimer()
+        self.token_update_timer.timeout.connect(self.update_token_display)
+        self.token_update_timer.start(2000)  # Update every 2 seconds
+
+        # Initialize managers
+        self.cache_manager = CacheManager()
+        self.config_manager = ConfigManager()
+        if not self.config_manager.validate():
+            QMessageBox.warning(
+                self,
+                "Configuration Warning",
+                "Some required API keys are missing. Some features may not work."
+            )
+
+        try:
+            # Initialize with default config
+            self.rag_handler = RAGHandler(
+                persist_directory="./knowledge_base",
+                use_openai=False,  # Set to False to use Sentence Transformers
+                embedding_model="all-mpnet-base-v2",
+                dimension=768,  # Updated dimension for all-mpnet-base-v2
+                chunk_size=500,
+                chunk_overlap=50
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to initialize RAG handler: {str(e)}")
+            sys.exit(1)
+
+        # Setup UI and signals
+        self.initUI()
+        self.setup_signals()
+
+
+    def show_progress_dialog(self, title: str, message: str) -> ProgressDialog:
+        progress_dialog = ProgressDialog(title, message, self)
+        progress_dialog.show()
+        return progress_dialog
+
+    def setup_agent_configs(self):
+        for agent_config in self.agent_configs:
+            agent_config.configuration_changed.connect(self.update_worker_configuration)
+
+    def update_worker_configuration(self):
+        if hasattr(self, 'worker'):
+            current_agents = []
+            for agent_config in self.agent_configs:
+                current_agents.append({
+                    'agent_number': agent_config.agent_number,
+                    'provider': agent_config.provider_combo.currentText(),
+                    'model': agent_config.model_combo.currentText(),
+                    'instructions': agent_config.instructions.toPlainText()
+                })
+            self.worker.agents = current_agents
+
+    def select_knowledge_base(self):
+        options = QFileDialog.Option.DontUseNativeDialog
+        directory = QFileDialog.getExistingDirectory(self, "Select Knowledge Base Directory", "", options=options)
+        if directory:
+            try:
+                if self.rag_handler.set_knowledge_base_path(directory):
+                    self.terminal_console.append(f"Knowledge base path set to: {directory}")
+                else:
+                    self.terminal_console.append("Failed to set knowledge base path")
+            except Exception as e:
+                self.terminal_console.append(f"Error setting knowledge base path: {str(e)}")
+
+    def get_internet_enabled(self):
+        return self.internet_enabled
+
+    def handle_error(self, error_message):
+        self.terminal_console.append(f"Error: {error_message}")
+        QMessageBox.critical(self, "Error", error_message)
+
+    def on_internet_toggle(self, state):
+        self.internet_enabled = bool(state)
+        # Update the worker if it exists
+        if self.worker:
+            self.worker.internet_enabled = self.internet_enabled
+        self.update_internet_status()
+
+    def setup_signals(self):
+        self.signals.show_error.connect(self.show_error_message)
+        self.signals.show_success.connect(self.show_success_message)
+        self.signals.update_progress.connect(self.update_progress)
+        self.signals.update_final_answer.connect(self.update_final_answer)
+
+        # If there's an active conversation, update the agents
+        if self.worker and hasattr(self.worker, 'agents'):
+            for agent in self.worker.agents:
+                agent.update_internet_access(self.internet_enabled)
+
+            # Optionally notify the user
+            status = "enabled" if self.internet_enabled else "disabled"
+            self.show_success_message(f"Internet access {status} for all agents")
+
+    def update_internet_status(self):
+        status = "Internet: Enabled" if self.internet_enabled else "Internet: Disabled"
+
+        # Add token counter to status bar
+        status_bar = self.statusBar()
+        status_bar.removeWidget(self.token_count_label)
+        status_bar.showMessage(status)
+        status_bar.addPermanentWidget(self.token_count_label)
+
+    def update_token_display(self):
+        """Update the token count display in the status bar, chat tab, and history tab"""
+        if token_counter:
+            stats = token_counter.get_session_stats()
+            input_tokens = stats["input_tokens"]
+            system_tokens = stats["system_tokens"]
+            input_system_tokens = stats["input_system_tokens"]  # Combined input + system
+            output_tokens = stats["output_tokens"]
+            total_tokens = stats["total_tokens"]
+            cost = stats["estimated_cost"]
+
+            # Format the token display text with separate counts for input+system and output
+            token_display_text = f"Input+System: {input_system_tokens} | Output: {output_tokens} | Total: {total_tokens} | Cost: ${cost:.4f}"
+
+            # Update the status bar label
+            self.token_count_label.setText(token_display_text)
+
+            # Update the chat token display if it exists
+            if hasattr(self, 'chat_token_display'):
+                self.chat_token_display.setText(token_display_text)
+
+            # Update the token stats text in the history tab if it exists
+            if hasattr(self, 'token_stats_text'):
+                # Format detailed token statistics
+                stats_text = f"<h3>Current Session</h3>"
+                stats_text += f"<p><b>Start Time:</b> {stats.get('start_time', 'N/A')}</p>"
+                stats_text += f"<p><b>Input Tokens:</b> {input_tokens}</p>"
+                stats_text += f"<p><b>System Tokens:</b> {system_tokens}</p>"
+                stats_text += f"<p><b>Input+System Tokens:</b> {input_system_tokens}</p>"
+                stats_text += f"<p><b>Output Tokens:</b> {output_tokens}</p>"
+                stats_text += f"<p><b>Total Tokens:</b> {total_tokens}</p>"
+                stats_text += f"<p><b>Estimated Cost:</b> ${cost:.4f}</p>"
+
+                # Add conversation breakdown if available
+                if 'conversation_count' in stats and stats['conversation_count'] > 0:
+                    stats_text += f"<h3>Conversations: {stats['conversation_count']}</h3>"
+
+                    # Add history information if available
+                    history = token_counter.history
+                    if history:
+                        stats_text += f"<h3>Previous Sessions</h3>"
+                        for i, session in enumerate(history):
+                            stats_text += f"<p><b>Session {i+1}:</b> {session.get('start_time', 'N/A')}</p>"
+                            stats_text += f"<p>Total Tokens: {session.get('total_tokens', 0)} | "
+                            stats_text += f"Cost: ${session.get('estimated_cost', 0):.4f}</p>"
+
+                self.token_stats_text.setHtml(stats_text)
+
+
+    def clear_chat(self):
+        self.conversation_history = []
+        self.agents_discussion.clear()
+        self.final_answer.clear()
+        self.input_prompt.clear()
+
+
+    def _setup_worker_connections(self):
+        """Set up worker signal connections"""
+        if not self.worker:
+            return
+
+        # Ensure we're using Qt.QueuedConnection for thread safety
+        self.worker.update_agents_discussion_signal.connect(
+            self.update_agents_discussion,
+            type=Qt.ConnectionType.QueuedConnection
+        )
+        self.worker.update_final_answer_signal.connect(
+            self.update_final_answer,
+            type=Qt.ConnectionType.QueuedConnection
+        )
+        self.worker.update_terminal_console_signal.connect(
+            self.update_terminal_console,
+            type=Qt.ConnectionType.QueuedConnection
+        )
+        self.worker.discussion_completed_signal.connect(
+            self.on_discussion_completed,
+            type=Qt.ConnectionType.QueuedConnection
+        )
+        self.worker.error_signal.connect(
+            self.handle_error,
+            type=Qt.ConnectionType.QueuedConnection
+        )
+
+    def _setup_worker(self, prompt, knowledge_base_content):
+        self.worker = Worker(
+            prompt=prompt,
+            general_instructions=self.general_instructions.toPlainText(),
+            agents=self._get_agent_configs(),
+            knowledge_base_files=self.knowledge_base_files,
+            internet_enabled=self.internet_enabled_checkbox.isChecked(),
+            knowledge_base_content=knowledge_base_content,
+            json_instructions=getattr(self, 'json_instructions', None),
+            config_manager=self.config_manager,
+            conversation_history=self.conversation_history
+        )
+        return self.worker
+
+    @pyqtSlot(str)
+    def show_error_message(self, message: str):
+        self.terminal_console.append(f"Error: {message}")
+        QMessageBox.critical(self, "Error", message)
+
+    @pyqtSlot(str)
+    def show_success_message(self, message: str):
+        self.terminal_console.append(f"Success: {message}")
+
+    @pyqtSlot(int)
+    def update_progress(self, value: int):
+        if hasattr(self, 'progress_bar'):
+            self.progress_bar.setValue(value)
+
+    def initUI(self):
+        # Create main widget and layout
+        main_widget = QWidget()
+        self.setCentralWidget(main_widget)
+        layout = QVBoxLayout(main_widget)
+
+        # Set light mode styling for the entire application
+        self.setStyleSheet("""
+            QMainWindow, QWidget {
+                background-color: #F5F5F5;
+                color: #212121;
+            }
+            QTabWidget::pane {
+                border: 1px solid #E0E0E0;
+                background-color: #FFFFFF;
+            }
+            QTabBar::tab {
+                background-color: #E0E0E0;
+                color: #424242;
+                padding: 8px 16px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }
+            QTabBar::tab:selected {
+                background-color: #FFFFFF;
+                color: #212121;
+                border: 1px solid #E0E0E0;
+                border-bottom: none;
+            }
+        """)
+
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        layout.addWidget(self.tab_widget)
+
+        # Create tabs
+        self.create_chat_tab()
+        self.create_history_tab()
+        self.create_settings_tab()
+
+    def create_chat_tab(self):
+        chat_tab = QWidget()
+        layout = QVBoxLayout(chat_tab)
+
+        # Left and Right widgets
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Splitter between left and right
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.addWidget(left_widget)
+        splitter.addWidget(right_widget)
+        splitter.setSizes([1600, 400])  # Initial sizes
+
+        layout.addWidget(splitter)
+
+        # Create icons directory if it doesn't exist
+        if not os.path.exists("icons"):
+            os.makedirs("icons")
+
+        # Input prompt with modern styling
+        self.input_prompt = QTextEdit()
+        self.input_prompt.setPlaceholderText("Enter your prompt here...")
+        self.input_prompt.setAcceptRichText(False)
+        self.input_prompt.setStyleSheet("""
+            QTextEdit {
+                background-color: white;
+                color: #000000;
+                border: 1px solid #E0E0E0;
+                border-radius: 8px;
+                padding: 12px;
+                font-family: 'Segoe UI', 'Roboto', sans-serif;
+                font-size: 13px;
+                line-height: 1.5;
+            }
+        """)
+
+        # Optional: Override paste behavior to ensure plain text
+        self.input_prompt.paste = lambda: self.input_prompt.insertPlainText(
+            QApplication.clipboard().text()
+        )
+
+        # Create modern icon-based buttons
+        button_layout = QHBoxLayout()
+
+        # Helper function to create styled buttons with icons
+        def create_button(text, icon_name, tooltip):
+            btn = QToolButton()
+            btn.setText(text)
+            btn.setIcon(QIcon(f"icons/{icon_name}.png"))
+            btn.setToolTip(tooltip)
+            btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            btn.setIconSize(QSize(24, 24))
+            btn.setMinimumWidth(100)
+            btn.setMinimumHeight(40)
+            return btn
+
+        # Create buttons with modern icons
+        self.load_file_btn = create_button("Load File", "file", "Load a file for processing")
+        self.knowledge_base_btn = create_button("RAG", "database", "Access knowledge base")
+        self.send_btn = create_button("Send", "send", "Send prompt to agents")
+        self.follow_up_btn = create_button("Follow Up", "chat", "Send a follow-up message")
+        self.stop_btn = create_button("Stop", "stop", "Stop current process")
+        self.clear_btn = create_button("Clear", "clear", "Clear all outputs")
+        self.save_pdf_btn = create_button("Save PDF", "pdf", "Save as PDF")
+
+        # Add buttons to layout with proper spacing
+        button_layout.setSpacing(10)
+        button_layout.setContentsMargins(15, 15, 15, 15)
+
+        for btn in [self.load_file_btn, self.knowledge_base_btn, self.send_btn,
+                   self.follow_up_btn, self.stop_btn, self.clear_btn, self.save_pdf_btn]:
+            button_layout.addWidget(btn)
+
+        # Create a widget for button_layout with modern styling
+        button_widget = QWidget()
+        button_widget.setLayout(button_layout)
+        button_widget.setStyleSheet("""
+            QToolButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                        stop:0 #4CAF50, stop:1 #388E3C);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QToolButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                        stop:0 #66BB6A, stop:1 #4CAF50);
+                border: 1px solid #388E3C;
+            }
+            QToolButton:pressed {
+                background: #388E3C;
+                padding-top: 9px;
+                padding-left: 17px;
+            }
+            QToolButton:disabled {
+                background: #BDBDBD;
+                color: #757575;
+            }
+        """)
+
+        # Add token counter display at the top of the chat
+        token_counter_layout = QHBoxLayout()
+        token_counter_label = QLabel("Token Usage:")
+        token_counter_label.setStyleSheet("""
+            font-size: 13px;
+            font-weight: bold;
+            color: #424242;
+        """)
+        token_counter_layout.addWidget(token_counter_label)
+
+        # Add token counter display
+        self.chat_token_display = QLabel("Input+System: 0 | Output: 0 | Total: 0 | Cost: $0.00")
+        self.chat_token_display.setStyleSheet("""
+            font-size: 13px;
+            color: #757575;
+            font-weight: 500;
+        """)
+        token_counter_layout.addWidget(self.chat_token_display)
+        token_counter_layout.addStretch()
+        left_layout.addLayout(token_counter_layout)
+
+        # Agents discussion with modern styling
+        self.agents_discussion = QTextEdit()
+        self.agents_discussion.setReadOnly(True)
+        self.agents_discussion.setPlaceholderText("Agents discussion live view")
+        self.agents_discussion.setAcceptRichText(True)
+        self.agents_discussion.setStyleSheet("""
+            QTextEdit {
+                background-color: #FFFFFF;
+                color: #000000;
+                border: 1px solid #E0E0E0;
+                border-radius: 8px;
+                padding: 12px;
+                font-family: 'Segoe UI', 'Roboto', sans-serif;
+                font-size: 13px;
+                line-height: 1.5;
+            }
+        """)
+
+        # Final Answer with modern styling
+        self.final_answer = QTextEdit()
+        self.final_answer.setReadOnly(True)
+        self.final_answer.setPlaceholderText("Final Answer")
+        self.final_answer.setAcceptRichText(True)
+        self.final_answer.setStyleSheet("""
+            QTextEdit {
+                background-color: #FFFFFF;
+                color: #000000;
+                border: 1px solid #E0E0E0;
+                border-radius: 8px;
+                padding: 12px;
+                font-family: 'Segoe UI', 'Roboto', sans-serif;
+                font-size: 13px;
+                line-height: 1.5;
+            }
+        """)
+
+        # Terminal console with monospace font - light mode
+        self.terminal_console = QTextEdit()
+        self.terminal_console.setReadOnly(True)
+        self.terminal_console.setPlaceholderText("Terminal console view (logging, errors, etc)")
+        self.terminal_console.setStyleSheet("""
+            QTextEdit {
+                background-color: #F5F5F5;
+                color: #212121;
+                border: 1px solid #E0E0E0;
+                border-radius: 8px;
+                padding: 12px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 12px;
+                line-height: 1.4;
+            }
+        """)
+
+        # Left side splitter with modern styling
+        left_splitter = QSplitter(Qt.Orientation.Vertical)
+        left_splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #E0E0E0;
+                height: 2px;
+            }
+            QSplitter::handle:hover {
+                background-color: #2196F3;
+            }
+        """)
+
+        left_splitter.addWidget(self.input_prompt)
+        left_splitter.addWidget(button_widget)
+        left_splitter.addWidget(self.agents_discussion)
+        left_splitter.addWidget(self.final_answer)
+        left_splitter.addWidget(self.terminal_console)
+
+        # Set initial sizes
+        left_splitter.setSizes([100, 150, 200, 400, 100])
+
+        # Add the splitter to the left_layout
+        left_layout.addWidget(left_splitter)
+
+        # Create top controls layout with modern styling
+        top_controls = QHBoxLayout()
+
+        # Internet checkbox with modern styling
+        self.internet_enabled_checkbox = QCheckBox("Enable Internet Access")
+        self.internet_enabled_checkbox.setStyleSheet("""
+            QCheckBox {
+                font-size: 13px;
+                color: #424242;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 2px solid #757575;
+                border-radius: 4px;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #2196F3;
+                border-color: #2196F3;
+                image: url(icons/check.png);
+            }
+            QCheckBox::indicator:hover {
+                border-color: #2196F3;
+            }
+        """)
+
+        self.internet_enabled_checkbox.stateChanged.connect(self.on_internet_toggle)
+        top_controls.addWidget(self.internet_enabled_checkbox)
+
+        # Add spacer to push JSON buttons to the right
+        top_controls.addStretch()
+
+        # Create JSON buttons with modern styling
+        save_json_btn = self.create_small_button("Save", "save", "Save configuration to JSON")
+        load_json_btn = self.create_small_button("Load", "load", "Load configuration from JSON")
+        self.profiles_btn = self.create_small_button("Example Profiles", "profile", "Load example agent profiles")
+        top_controls.addWidget(save_json_btn)
+        top_controls.addWidget(load_json_btn)
+        top_controls.addWidget(self.profiles_btn)
+
+        # Add top_controls to right_layout
+        right_layout.addLayout(top_controls)
+
+        # Right side components with modern styling
+        config_label = QLabel("Agent Configuration")
+        config_label.setStyleSheet("""
+            QLabel {
+                font-size: 16px;
+                font-weight: bold;
+                color: #212121;
+                padding: 10px 0;
+            }
+        """)
+        right_layout.addWidget(config_label)
+
+        # Number of agents with modern styling
+        agents_layout = QHBoxLayout()
+        agents_label = QLabel("Number of Agents:")
+        agents_label.setStyleSheet("font-size: 13px; color: #424242;")
+        agents_layout.addWidget(agents_label)
+
+        self.agent_count = QSpinBox()
+        self.agent_count.setRange(1, 5)
+        self.agent_count.setValue(1)
+        self.agent_count.setStyleSheet("""
+            QSpinBox {
+                background-color: white;
+                border: 1px solid #E0E0E0;
+                border-radius: 6px;
+                padding: 6px;
+                font-size: 13px;
+                min-width: 80px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                border: none;
+                background: #F5F5F5;
+                width: 20px;
+            }
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+                background: #E0E0E0;
+            }
+        """)
+        self.agent_count.valueChanged.connect(self.update_agent_config)
+        agents_layout.addWidget(self.agent_count)
+        right_layout.addLayout(agents_layout)
+
+        # General instructions
+        self.general_instructions = QTextEdit()
+        self.general_instructions.setPlaceholderText("Additional instructions for all agents")
+        self.general_instructions.setStyleSheet("""
+            QTextEdit {
+                background-color: white;
+                color: #000000;
+                border: 1px solid #E0E0E0;
+                border-radius: 8px;
+                padding: 12px;
+                font-family: 'Segoe UI', 'Roboto', sans-serif;
+                font-size: 13px;
+                line-height: 1.5;
+            }
+        """)
+        # Set a fixed height for the general instructions to make it smaller
+        self.general_instructions.setMaximumHeight(100)
+
+        # Use the base template from InstructionTemplates
+        default_instructions = InstructionTemplates.BASE
+        # Add custom general instructions that complement the base template
+        custom_general_instructions = """
+
+        """
+        # Combine the templates
+        combined_instructions = f"{default_instructions}\n\n{custom_general_instructions}"
+        self.general_instructions.setPlainText(combined_instructions)
+        right_layout.addWidget(self.general_instructions)
+
+        # Agent configs - add scroll area for many agents
+        agent_scroll_area = QScrollArea()
+        agent_scroll_area.setWidgetResizable(True)
+        agent_scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+
+        # Create a widget to hold the agent configs
+        self.agent_config_widget = QWidget()
+        self.agent_config_layout = QVBoxLayout(self.agent_config_widget)
+
+        # Add the widget to the scroll area
+        agent_scroll_area.setWidget(self.agent_config_widget)
+
+        # Add the scroll area to the right layout
+        right_layout.addWidget(agent_scroll_area)
+
+        # Initialize agent configs
+        self.update_agent_config(1)  # Initial setup for 1 agent
+
+        # Connect buttons to slots
+        self.send_btn.clicked.connect(self.send_prompt)
+        self.follow_up_btn.clicked.connect(self.send_follow_up)
+        self.load_file_btn.clicked.connect(self.load_file)
+        self.knowledge_base_btn.clicked.connect(self.access_knowledge_base)
+        self.profiles_btn.clicked.connect(self.show_profiles_dialog)
+        save_json_btn.clicked.connect(self.save_to_json)
+        load_json_btn.clicked.connect(self.load_from_json)
+        self.stop_btn.clicked.connect(self.stop_agents)
+        self.clear_btn.clicked.connect(self.clear_outputs)
+        self.clear_btn.clicked.connect(self.clear_chat)
+        self.follow_up_btn.setEnabled(False)
+        self.save_pdf_btn.clicked.connect(self.save_code_to_pdf)
+
+        # Set default font and size
+        font = QFont("Segoe UI", 10)
+        self.agents_discussion.setFont(font)
+        self.final_answer.setFont(font)
+        self.terminal_console.setFont(QFont("Consolas", 10))
+
+        self.tab_widget.addTab(chat_tab, "Chat")
+
+    def create_history_tab(self):
+        """Create the conversation history tab"""
+        history_tab = QWidget()
+        layout = QVBoxLayout(history_tab)
+
+        # Create header with title and refresh button
+        header_layout = QHBoxLayout()
+        header_label = QLabel("Conversation History")
+        header_label.setStyleSheet("""
+            font-size: 16px;
+            font-weight: bold;
+            color: #212121;
+            padding: 10px 0;
+        """)
+        header_layout.addWidget(header_label)
+
+        # Add refresh button
+        refresh_btn = self.create_small_button("Refresh", "load", "Refresh conversation list")
+        refresh_btn.clicked.connect(self.refresh_conversation_list)
+        header_layout.addStretch()
+        header_layout.addWidget(refresh_btn)
+
+        # Add delete all button
+        delete_all_btn = self.create_small_button("Delete All", "clear", "Delete all conversations")
+        delete_all_btn.clicked.connect(self.delete_all_conversations)
+        header_layout.addWidget(delete_all_btn)
+
+        layout.addLayout(header_layout)
+
+        # Create conversation list
+        self.conversation_list = QListWidget()
+        self.conversation_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.conversation_list.setStyleSheet("""
+            QListWidget {
+                background-color: white;
+                border: 1px solid #E0E0E0;
+                border-radius: 8px;
+                padding: 8px;
+                font-family: 'Segoe UI', 'Roboto', sans-serif;
+                font-size: 13px;
+            }
+            QListWidget::item {
+                border-bottom: 1px solid #E0E0E0;
+                padding: 8px;
+                margin: 2px 0;
+            }
+            QListWidget::item:selected {
+                background-color: #2196F3;
+                color: white;
+                border-radius: 4px;
+            }
+            QListWidget::item:hover:!selected {
+                background-color: #E3F2FD;
+                border-radius: 4px;
+            }
+        """)
+        layout.addWidget(self.conversation_list)
+
+        # Add context menu to conversation list
+        self.conversation_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.conversation_list.customContextMenuRequested.connect(self.show_conversation_context_menu)
+
+        # Add buttons for loading and deleting conversations
+        button_layout = QHBoxLayout()
+
+        # Load conversation button
+        load_conv_btn = QPushButton("Load Conversation")
+        load_conv_btn.clicked.connect(self.load_selected_conversation)
+        load_conv_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                        stop:0 #2196F3, stop:1 #1976D2);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                        stop:0 #42A5F5, stop:1 #2196F3);
+                border: 1px solid #1E88E5;
+            }
+            QPushButton:pressed {
+                background: #1976D2;
+                padding-top: 9px;
+                padding-left: 17px;
+            }
+        """)
+        button_layout.addWidget(load_conv_btn)
+
+        # Delete conversation button
+        delete_conv_btn = QPushButton("Delete Conversation")
+        delete_conv_btn.clicked.connect(self.delete_selected_conversation)
+        delete_conv_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                        stop:0 #F44336, stop:1 #D32F2F);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                        stop:0 #EF5350, stop:1 #E53935);
+                border: 1px solid #C62828;
+            }
+            QPushButton:pressed {
+                background: #D32F2F;
+                padding-top: 9px;
+                padding-left: 17px;
+            }
+        """)
+        button_layout.addWidget(delete_conv_btn)
+
+        layout.addLayout(button_layout)
+
+        # Add token usage statistics
+        token_stats_label = QLabel("Token Usage Statistics")
+        token_stats_label.setStyleSheet("""
+            font-size: 16px;
+            font-weight: bold;
+            color: #212121;
+            padding: 10px 0;
+        """)
+        layout.addWidget(token_stats_label)
+
+        # Token stats display
+        self.token_stats_text = QTextEdit()
+        self.token_stats_text.setReadOnly(True)
+        self.token_stats_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #F5F5F5;
+                border: 1px solid #E0E0E0;
+                border-radius: 8px;
+                padding: 12px;
+                font-family: 'Segoe UI', 'Roboto', sans-serif;
+                font-size: 13px;
+                line-height: 1.5;
+            }
+        """)
+        layout.addWidget(self.token_stats_text)
+
+        # Add the tab
+        self.tab_widget.addTab(history_tab, "History")
+
+        # Populate the conversation list
+        self.refresh_conversation_list()
+
+    def refresh_conversation_list(self):
+        """Refresh the conversation list"""
+        self.conversation_list.clear()
+        conversations = self.conversation_manager.get_conversation_list()
+
+        for conv in conversations:
+            # Format the timestamp
+            timestamp = conv["timestamp"]
+            if "T" in timestamp:
+                date_part, time_part = timestamp.split("T")
+                time_part = time_part.split(".")[0]  # Remove milliseconds
+                formatted_time = f"{date_part} {time_part}"
+            else:
+                formatted_time = timestamp
+
+            # Format the item text
+            item_text = f"{formatted_time} - {conv['message_count']} messages\n"
+            item_text += f"Tokens: {conv['total_tokens']} | Cost: ${conv['estimated_cost']:.4f}\n"
+            item_text += f"{conv['first_message']}"
+
+            # Create the item and store the conversation ID
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.ItemDataRole.UserRole, conv["id"])
+            self.conversation_list.addItem(item)
+
+    def show_conversation_context_menu(self, position):
+        """Show context menu for conversation list"""
+        item = self.conversation_list.itemAt(position)
+        if not item:
+            return
+
+        menu = QMenu()
+        load_action = menu.addAction("Load Conversation")
+        delete_action = menu.addAction("Delete Conversation")
+
+        action = menu.exec(self.conversation_list.mapToGlobal(position))
+
+        if action == load_action:
+            self.load_selected_conversation()
+        elif action == delete_action:
+            self.delete_selected_conversation()
+
+    def load_selected_conversation(self):
+        """Load the selected conversation"""
+        selected_items = self.conversation_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "No Selection", "Please select a conversation to load.")
+            return
+
+        conversation_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
+        if not conversation_id:
+            return
+
+        # Load the conversation
+        if self.conversation_manager.load_conversation(conversation_id):
+            # Switch to chat tab
+            self.tab_widget.setCurrentIndex(0)
+
+            # Clear current display
+            self.agents_discussion.clear()
+            self.final_answer.clear()
+
+            # Update conversation history for follow-up prompts
+            self.conversation_history = []
+
+            # Display the conversation
+            messages = self.conversation_manager.current_conversation["messages"]
+
+            # First, build the conversation history for the worker
+            for msg in messages:
+                self.conversation_history.append(f"{msg['role']}: {msg['content']}")
+
+            # Then display all messages in the UI
+            for msg in messages:
+                if msg["role"] == "user":
+                    # Display user message
+                    self.agents_discussion.append(f"<b>User:</b> {msg['content']}")
+                elif msg["role"] == "assistant":
+                    # Display final answer
+                    formatted_final = self.format_final_response(msg["content"])
+                    self.final_answer.setHtml(formatted_final)
+                elif msg["role"].startswith("agent_"):
+                    # Display agent message
+                    agent_num = msg["role"].replace("agent_", "")
+                    model = msg["metadata"].get("model", "Unknown") if "metadata" in msg else "Unknown"
+
+                    # Format agent response
+                    formatted_response = self.format_agent_response(
+                        int(agent_num),
+                        model,
+                        msg["content"],
+                        is_first_chunk=True
+                    )
+                    self.agents_discussion.append(formatted_response)
+
+            # Store the current conversation ID for follow-up prompts
+            self.current_conversation_id = conversation_id
+
+            # Load token usage data if available
+            if token_counter and "token_usage" in self.conversation_manager.current_conversation:
+                token_usage = self.conversation_manager.current_conversation["token_usage"]
+                # Update token counter with the loaded conversation's data
+                if token_counter.current_session["total_tokens"] == 0:
+                    # Only update if we don't have any tokens tracked yet
+                    token_counter.current_session["input_tokens"] = token_usage.get("input_tokens", 0)
+                    token_counter.current_session["system_tokens"] = token_usage.get("system_tokens", 0)  # Add system tokens
+                    token_counter.current_session["output_tokens"] = token_usage.get("output_tokens", 0)
+                    token_counter.current_session["total_tokens"] = token_usage.get("total_tokens", 0)
+                    token_counter.current_session["estimated_cost"] = token_usage.get("estimated_cost", 0.0)
+
+                    # Update the token display
+                    self.update_token_display()
+
+            # Enable follow-up button
+            self.follow_up_btn.setEnabled(True)
+
+            # Show success message
+            self.show_success_message(f"Loaded conversation from {conversation_id}")
+        else:
+            QMessageBox.warning(self, "Error", f"Failed to load conversation {conversation_id}")
+
+    def delete_selected_conversation(self):
+        """Delete the selected conversation"""
+        selected_items = self.conversation_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "No Selection", "Please select a conversation to delete.")
+            return
+
+        conversation_id = selected_items[0].data(Qt.ItemDataRole.UserRole)
+        if not conversation_id:
+            return
+
+        # Confirm deletion
+        reply = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            f"Are you sure you want to delete this conversation?\n\n{selected_items[0].text()}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            # Delete the conversation
+            if self.conversation_manager.delete_conversation(conversation_id):
+                # Refresh the list
+                self.refresh_conversation_list()
+                self.show_success_message(f"Deleted conversation {conversation_id}")
+            else:
+                QMessageBox.warning(self, "Error", f"Failed to delete conversation {conversation_id}")
+
+    def delete_all_conversations(self):
+        """Delete all conversations"""
+        # Confirm deletion
+        reply = QMessageBox.question(
+            self,
+            "Confirm Deletion",
+            "Are you sure you want to delete ALL conversations?\nThis action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            # Delete all conversations
+            success_count, fail_count = self.conversation_manager.delete_all_conversations()
+
+            # Refresh the list
+            self.refresh_conversation_list()
+
+            if fail_count == 0:
+                self.show_success_message(f"Successfully deleted {success_count} conversations")
+            else:
+                QMessageBox.warning(
+                    self,
+                    "Partial Success",
+                    f"Deleted {success_count} conversations, but failed to delete {fail_count} conversations."
+                )
+
+    def create_settings_tab(self):
+        settings_tab = QWidget()
+        layout = QVBoxLayout(settings_tab)
+
+        # API Keys section
+        api_group = QWidget()
+        api_layout = QVBoxLayout(api_group)
+        api_layout.setSpacing(10)
+
+        # Create input fields for each API key
+        self.api_inputs = {}
+        api_keys = [
+            ('OpenAI API Key', 'OPENAI_API_KEY'),
+            ('Google API Key', 'GOOGLE_API_KEY'),
+            ('Gemini API Key', 'GEMINI_API_KEY'),
+            ('Anthropic API Key', 'ANTHROPIC_API_KEY'),
+            ('Groq API Key', 'GROQ_API_KEY'),
+            ('Grok API Key', 'GROK_API_KEY'),
+            ('DeepSeek API Key', 'DEEPSEEK_API_KEY'),
+            ('Serper API Key', 'SERPER_API_KEY')
+        ]
+
+        for label_text, key_name in api_keys:
+            key_widget = QWidget()
+            key_layout = QHBoxLayout(key_widget)
+
+            label = QLabel(label_text)
+            input_field = QTextEdit()
+            input_field.setFixedHeight(30)
+            input_field.setPlaceholderText(f"Enter {label_text}")
+
+            # Load existing value if available
+            current_value = self.config_manager.get_api_key(key_name)
+            if current_value:
+                input_field.setText(current_value)
+
+            key_layout.addWidget(label)
+            key_layout.addWidget(input_field)
+
+            self.api_inputs[key_name] = input_field
+            api_layout.addWidget(key_widget)
+
+        # Add save button
+        save_button = QPushButton("Save API Keys")
+        save_button.clicked.connect(self.save_api_keys)
+        api_layout.addWidget(save_button)
+
+        # Add API group to main layout
+        layout.addWidget(api_group)
+        layout.addStretch()
+
+        self.tab_widget.addTab(settings_tab, "Settings")
+
+    def save_api_keys(self):
+        """Save API keys to configuration"""
+        for key_name, input_field in self.api_inputs.items():
+            value = input_field.toPlainText().strip()
+            if value:
+                self.config_manager.set_api_key(key_name, value)
+            else:
+                self.config_manager.remove_api_key(key_name)
+
+        self.config_manager.save_config()
+        QMessageBox.information(self, "Success", "API keys have been saved successfully!")
+
+    def create_small_button(self, text, icon_name, tooltip):
+        btn = QToolButton()
+        icon = QIcon(f"icons/{icon_name}.png")
+        btn.setIcon(icon)
+        btn.setText(text)
+        btn.setToolTip(tooltip)
+        btn.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        btn.setIconSize(QSize(16, 16))  # Smaller icons
+        btn.setStyleSheet("""
+            QToolButton {
+                border: none;
+                padding: 3px;
+                font-family: 'Segoe UI', 'Roboto', sans-serif;
+            }
+            QToolButton:hover {
+                background-color: #e0e0e0;
+                border-radius: 3px;
+            }
+        """)
+        return btn
+
+    def save_code_to_pdf(self):
+        """Generate PDF of the current codebase"""
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            pdf_path = py_to_pdf(
+                directory=current_dir,
+                archive_dir='code_archives',
+                force=True
+            )
+            if pdf_path:
+                self.terminal_console.append(f"Code archived to PDF: {pdf_path}")
+            else:
+                self.terminal_console.append("No PDF was created")
+        except Exception as e:
+            self.terminal_console.append(f"Error creating PDF: {str(e)}")
+
+    def show_profiles_dialog(self):
+        """Show the profiles dialog to load example profiles"""
+        dialog = ProfileDialog(self)
+        dialog.profile_selected.connect(self.load_profile)
+
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Check if user wants to save current configuration
+            if hasattr(dialog, 'profile_name'):
+                self.save_current_profile(dialog.profile_name, dialog.profile_description)
+
+    def load_profile(self, profile):
+        """Load a profile into the UI"""
+        try:
+            # Update agent count
+            self.agent_count.setValue(len(profile.agents))
+
+            # Set general instructions
+            self.general_instructions.setPlainText(profile.general_instructions)
+
+            # Set internet enabled
+            self.internet_enabled_checkbox.setChecked(profile.internet_enabled)
+
+            # Configure each agent
+            for i, agent_profile in enumerate(profile.agents):
+                if i < len(self.agent_configs):
+                    agent_config = self.agent_configs[i]
+
+                    # Set provider
+                    agent_config.provider_combo.setCurrentText(agent_profile.provider)
+
+                    # Set model (after provider to ensure model list is updated)
+                    agent_config.update_models(agent_profile.provider)
+                    agent_config.model_combo.setCurrentText(agent_profile.model)
+
+                    # Set instructions
+                    agent_config.instructions.setPlainText(agent_profile.instructions)
+
+            self.terminal_console.append(f"Loaded profile: {profile.name}")
+
+        except Exception as e:
+            self.terminal_console.append(f"Error loading profile: {str(e)}")
+            QMessageBox.warning(self, "Error", f"Failed to load profile: {str(e)}")
+
+    def save_current_profile(self, name, description):
+        """Save the current configuration as a profile"""
+        try:
+            # Create agent profiles
+            agents = []
+            for agent_config in self.agent_configs:
+                agent_profile = AgentProfile(
+                    provider=agent_config.provider_combo.currentText(),
+                    model=agent_config.model_combo.currentText(),
+                    instructions=agent_config.instructions.toPlainText(),
+                    agent_number=agent_config.agent_number
+                )
+                agents.append(agent_profile)
+
+            # Create profile
+            profile = Profile(
+                name=name,
+                description=description,
+                general_instructions=self.general_instructions.toPlainText(),
+                agents=agents,
+                internet_enabled=self.internet_enabled_checkbox.isChecked()
+            )
+
+            # Save profile
+            if profile_manager.save_profile(profile):
+                self.terminal_console.append(f"Saved profile: {name}")
+            else:
+                self.terminal_console.append(f"Failed to save profile: {name}")
+                QMessageBox.warning(self, "Error", f"Failed to save profile: {name}")
+
+        except Exception as e:
+            self.terminal_console.append(f"Error saving profile: {str(e)}")
+            QMessageBox.warning(self, "Error", f"Failed to save profile: {str(e)}")
+
+    @pyqtSlot(int)
+    def update_agent_config(self, count):
+        # Clear existing agent configs
+        for i in reversed(range(self.agent_config_layout.count())):
+            widget = self.agent_config_layout.itemAt(i).widget()
+            if widget:
+                widget.setParent(None)
+        self.agent_configs = []
+
+        # Add new agent configs
+        for i in range(count):
+            agent_config = AgentConfig(i + 1)  # Only pass agent_number
+            self.agent_configs.append(agent_config)
+            self.agent_config_layout.addWidget(agent_config)
+
+        # Update instructions for all agents to reflect new total
+        for agent_config in self.agent_configs:
+            agent_config.update_total_agents(count)
+
+    def send_prompt(self):
+        """Start a new conversation."""
+        # Clear history for new conversation
+        self.conversation_history = []
+        prompt = self.input_prompt.toPlainText()
+        if not prompt.strip():
+            QMessageBox.warning(self, "Input Error", "Please enter a prompt.")
+            return
+
+        # Stop existing worker thread if running
+        if self.worker_thread and self.worker_thread.is_alive():
+            self.worker.stop()
+            self.worker_thread.join()
+
+        # Reset token counter for new conversation if available
+        if token_counter:
+            token_counter.reset_session()
+            self.update_token_display()
+
+        # Get relevant chunks from knowledge base
+        chunks = self.rag_handler.get_relevant_chunks(prompt)
+        knowledge_base_content = "\n".join([chunk['content'] for chunk in chunks])
+
+        # Create new worker with empty conversation history
+        self.worker = Worker(
+            prompt=prompt,
+            general_instructions=self.general_instructions.toPlainText(),
+            agents=self._get_current_agents(),
+            knowledge_base_files=self.knowledge_base_files,
+            internet_enabled=self.internet_enabled_checkbox.isChecked(),
+            knowledge_base_content=knowledge_base_content,
+            json_instructions=getattr(self, 'json_instructions', None),
+            config_manager=self.config_manager,
+            conversation_history=None  # Explicitly pass None for new conversation
+        )
+
+        # Connect worker signals
+        self._setup_worker_connections()
+
+        # Clear previous conversation display
+        self.agents_discussion.clear()
+        self.final_answer.clear()
+
+        # Create and start thread
+        self.toggle_input_buttons(False)
+        self.worker_thread = threading.Thread(target=self.worker.start_agent_discussion)
+        self.worker_thread.start()
+
+    def send_follow_up(self):
+        """Continue existing conversation."""
+        follow_up_prompt = self.input_prompt.toPlainText()
+        if not follow_up_prompt.strip():
+            QMessageBox.warning(self, "Input Error", "Please enter a follow-up question.")
+            return
+
+        # Use the current conversation ID if available, otherwise find the most recent one
+        current_conversation_id = self.current_conversation_id
+
+        if not current_conversation_id:
+            # Find the most recent conversation file
+            history_dir = Path("conversation_history")
+
+            if history_dir.exists():
+                conversation_files = sorted(
+                    history_dir.glob("conversation_*.json"),
+                    key=lambda x: x.stat().st_mtime,
+                    reverse=True
+                )
+                if conversation_files:
+                    current_conversation_id = conversation_files[0].stem.replace('conversation_', '')
+
+        if not current_conversation_id:
+            QMessageBox.warning(
+                self,
+                "No Active Conversation",
+                "No previous conversation found. Starting a new conversation instead."
+            )
+            self.send_prompt()
+            return
+
+        # Load the existing conversation
+        if not self.conversation_manager.load_conversation(current_conversation_id):
+            # Try creating a new conversation manager and loading the conversation
+            conversation_manager = ConversationManager()
+            if conversation_manager.load_conversation(current_conversation_id):
+                # Copy the loaded conversation to our main conversation manager
+                self.conversation_manager.current_conversation = conversation_manager.current_conversation
+            else:
+                QMessageBox.warning(self, "Error", f"Failed to load conversation {current_conversation_id}")
+                return
+
+        # Update conversation history from the loaded conversation
+        self.conversation_history = [
+            f"{msg['role']}: {msg['content']}"
+            for msg in self.conversation_manager.current_conversation["messages"]
+        ]
+
+        # Cleanup previous worker/thread
+        self.cleanup_worker()
+
+        # Get relevant chunks from knowledge base for the follow-up
+        chunks = self.rag_handler.get_relevant_chunks(follow_up_prompt)
+        knowledge_base_content = "\n".join([chunk['content'] for chunk in chunks])
+
+        # Create new worker with existing conversation history
+        self.worker = Worker(
+            prompt=follow_up_prompt,
+            general_instructions=self.general_instructions.toPlainText(),
+            agents=self._get_current_agents(),
+            knowledge_base_files=self.knowledge_base_files,
+            internet_enabled=self.internet_enabled_checkbox.isChecked(),
+            knowledge_base_content=knowledge_base_content,
+            json_instructions=getattr(self, 'json_instructions', None),
+            config_manager=self.config_manager,
+            conversation_history=self.conversation_history
+        )
+
+        # Set the conversation ID for the worker
+        self.worker.current_conversation_id = current_conversation_id
+
+        # Also store it in the main window for future follow-ups
+        self.current_conversation_id = current_conversation_id
+
+        # Connect signals
+        self._setup_worker_connections()
+
+        # Disable buttons during processing
+        self.toggle_input_buttons(False)
+
+        # Start the worker thread
+        self.worker_thread = threading.Thread(target=self.worker.start_agent_discussion)
+        self.worker_thread.start()
+
+    def update_worker_internet_status(self):
+        if self.worker:
+            self.worker.internet_enabled = self.internet_enabled
+
+    def _get_current_agents(self):
+        return [{
+            'agent_number': agent_config.agent_number,
+            'provider': agent_config.provider_combo.currentText(),
+            'model': agent_config.model_combo.currentText(),
+            'instructions': agent_config.instructions.toPlainText()
+        } for agent_config in self.agent_configs]
+
+    def closeEvent(self, event):
+        self.cleanup_worker()
+        event.accept()
+
+    def cleanup_worker(self):
+        if self.thread and self.worker:
+            self.worker.stop()
+            self.thread.quit()
+            self.thread.wait()
+            self.worker = None
+            self.thread = None
+
+    def load_knowledge_base(self):
+        options = QFileDialog.Option()
+        files, _ = QFileDialog.getOpenFileNames(self, "Select Knowledge Base Files", "",
+                                                "Text Files (*.txt);;All Files (*)", options=options)
+        if files:
+            try:
+                # Add files to RAG system
+                results = self.rag_handler.batch_add_files(files)
+
+                # Update UI
+                self.knowledge_base_files = files
+                self.knowledge_base_label.setText(f"{len(files)} file(s) selected")
+
+                # Show success/error messages
+                success_count = sum(1 for result in results.values() if result)
+                if success_count > 0:
+                    QMessageBox.information(self, "Success", f"Successfully added {success_count} file(s) to knowledge base")
+                if success_count < len(files):
+                    QMessageBox.warning(self, "Warning", f"Failed to add {len(files) - success_count} file(s)")
+
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to load knowledge base: {str(e)}")
+
+    def on_discussion_completed(self):
+        self.toggle_input_buttons(True)
+        # Enable the follow-up button after the initial conversation
+        self.follow_up_btn.setEnabled(True)
+        self.toggle_input_buttons(True)
+        self.follow_up_btn.setEnabled(True)
+        self.worker_thread = None
+        #self.worker = None
+
+    def toggle_input_buttons(self, enabled):
+        self.send_btn.setEnabled(enabled)
+        self.follow_up_btn.setEnabled(enabled)
+        self.load_file_btn.setEnabled(enabled)
+        self.knowledge_base_btn.setEnabled(enabled)
+
+    def stop_agents(self):
+        if self.worker:
+            self.worker.stop()
+            self.terminal_console.append("Agents processing stopped by user.")
+
+    def clear_outputs(self):
+        self.agents_discussion.clear()
+        self.final_answer.clear()
+        self.terminal_console.append("Cleared agents discussion and final answer.")
+
+
+    def update_conversation_history(self, history):
+        """Update the conversation history and display."""
+        self.conversation_history = history
+        # Update the display without clearing previous content
+        current_text = self.agents_discussion.toPlainText()
+        if current_text:
+            self.agents_discussion.append("\n".join(history[-2:]))  # Add only new messages
+        else:
+            self.agents_discussion.setPlainText("\n".join(history))
+
+    @pyqtSlot(str)
+    def update_agents_discussion(self, text: str):
+        """Update the agents discussion window with formatted text."""
+        cursor = self.agents_discussion.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.agents_discussion.setTextCursor(cursor)
+
+        # Format the text before inserting
+        formatted_text = self.format_text_content(text)
+        self.agents_discussion.insertHtml(formatted_text)
+
+        self.agents_discussion.verticalScrollBar().setValue(
+            self.agents_discussion.verticalScrollBar().maximum()
+        )
+
+    def format_text_content(self, text: str):
+        """Format text content with improved code block handling"""
+        paragraphs = text.split('\n')
+        formatted_parts = []
+
+        in_code_block = False
+        code_content = []
+        code_language = None
+
+        i = 0
+        while i < len(paragraphs):
+            paragraph = paragraphs[i]
+
+            # Handle code blocks with language specification
+            if paragraph.strip().startswith("```"):
+                if in_code_block:
+                    # End of code block
+                    in_code_block = False
+                    code_text = "\n".join(code_content)
+                    formatted_parts.append(self.format_code_block(code_text, code_language))
+                    code_content = []
+                    code_language = None
+                else:
+                    # Start of code block - check for language specification
+                    in_code_block = True
+                    lang_spec = paragraph.strip().lstrip('```').strip()
+                    if lang_spec:
+                        code_language = lang_spec
+                i += 1
+                continue
+
+            if in_code_block:
+                code_content.append(paragraph)
+                i += 1
+                continue
+
+            # Handle different types of content
+            stripped = paragraph.strip()
+            if not stripped:
+                formatted_parts.append("<br>")
+            elif stripped.startswith("#"):
+                formatted_parts.append(self.format_header(stripped))
+            elif stripped.startswith("- ") or stripped.startswith("* "):
+                formatted_parts.append(self.format_list_item(stripped))
+            elif stripped.startswith(">"):
+                formatted_parts.append(self.format_blockquote(stripped))
+            else:
+                formatted_parts.append(self.format_paragraph(stripped))
+
+            i += 1
+
+        # Handle unclosed code blocks
+        if in_code_block and code_content:
+            code_text = "\n".join(code_content)
+            formatted_parts.append(self.format_code_block(code_text, code_language))
+
+        return "\n".join(formatted_parts)
+
+    def format_code_block(self, code: str, language: str = None):
+        """
+        Format code blocks with proper indentation and syntax highlighting.
+        Uses pre tags to preserve whitespace and indentation.
+        """
+        # Apply syntax highlighting based on language
+        highlighted_code = code
+
+        if language and language.lower() == 'python':
+            # Apply Python syntax highlighting
+            highlighted_code = self.format_python_keywords(highlighted_code)
+            highlighted_code = self.format_python_strings(highlighted_code)
+            highlighted_code = self.format_python_numbers(highlighted_code)
+            highlighted_code = self.format_python_comments(highlighted_code)
+
+        # Escape HTML entities to prevent rendering issues
+        # But preserve the syntax highlighting spans we just added
+        if '<span' not in highlighted_code:
+            highlighted_code = highlighted_code.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+        # Different background colors for different languages
+        bg_colors = {
+            'python': '#f6f8fa',
+            'javascript': '#f7f7f7',
+            'html': '#f8f8f8',
+            'css': '#f5f5f5',
+            'json': '#f6f8fa',
+            'bash': '#f5f5f5',
+            'sql': '#f8f8f8'
+        }
+
+        bg_color = bg_colors.get(language.lower() if language else None, '#f6f8fa')
+
+        # Use pre tag to preserve whitespace and indentation
+        return f"""
+        <div style='
+            background-color: {bg_color};
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 8px 0;
+            overflow-x: auto;
+        '>
+        <pre style='
+            font-family: "Consolas", "Monaco", "Courier New", monospace;
+            font-size: 14px;
+            line-height: 1.45;
+            margin: 0;
+            white-space: pre;
+            tab-size: 4;
+            color: #24292e;
+        '><code>{highlighted_code}</code></pre>
+        </div>
+        """
+
+    @pyqtSlot(str)
+    def update_final_answer(self, text: str):
+        self.final_answer.clear()  # Clear previous content
+        cursor = self.final_answer.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.final_answer.setTextCursor(cursor)
+
+        # Process and format the text
+        formatted_text = self.format_text_content(text)
+
+        # Set the formatted text as HTML
+        self.final_answer.setHtml(formatted_text)
+
+        # Scroll to the bottom
+        self.final_answer.verticalScrollBar().setValue(
+            self.final_answer.verticalScrollBar().maximum()
+        )
+
+    # Add these methods to enhance code formatting
+    def format_python_keywords(self, code: str) -> str:
+        """Add syntax highlighting for Python keywords"""
+        import re
+
+        keywords = [
+            'def', 'class', 'if', 'else', 'elif', 'for', 'while',
+            'try', 'except', 'finally', 'with', 'as', 'import',
+            'from', 'return', 'yield', 'break', 'continue', 'pass',
+            'True', 'False', 'None', 'and', 'or', 'not', 'is', 'in',
+            'lambda', 'nonlocal', 'global', 'assert', 'del', 'raise'
+        ]
+
+        # Use regex to match whole words only
+        for keyword in keywords:
+            # Match the keyword as a whole word with word boundaries
+            pattern = r'\b(' + keyword + r')\b'
+            replacement = r'<span style="color: #0000ff;">\1</span>'
+            code = re.sub(pattern, replacement, code)
+
+        return code
+
+    def format_python_strings(self, code: str) -> str:
+        """Add syntax highlighting for string literals"""
+        import re
+
+        # Handle single quotes
+        code = re.sub(
+            r"'([^']*)'",
+            r'<span style="color: #067d17;">"\1"</span>',
+            code
+        )
+
+        # Handle double quotes
+        code = re.sub(
+            r'"([^"]*)"',
+            r'<span style="color: #067d17;">"\1"</span>',
+            code
+        )
+
+        return code
+
+    def format_python_numbers(self, code: str) -> str:
+        """Add syntax highlighting for numbers"""
+        import re
+
+        # Handle integers and floats
+        code = re.sub(
+            r'\b(\d+\.?\d*)\b',
+            r'<span style="color: #098658;">\1</span>',
+            code
+        )
+
+        return code
+
+    def format_python_comments(self, code: str) -> str:
+        """Add syntax highlighting for comments"""
+        import re
+
+        # Handle single-line comments
+        code = re.sub(
+            r'(#.*)$',
+            r'<span style="color: #008000;">\1</span>',
+            code,
+            flags=re.MULTILINE
+        )
+
+        return code
+
+    def format_header(self, text: str):
+        level = len(text) - len(text.lstrip('#'))
+        text = text.lstrip('#').strip()
+        size = max(24 - (level * 2), 14)  # Decrease size for each header level
+        return f"""
+        <div style='
+            margin: 20px 0 10px 0;
+            font-family: Arial, sans-serif;
+            font-size: {size}px;
+            font-weight: bold;
+            color: #24292e;
+            border-bottom: 1px solid #eaecef;
+            padding-bottom: 0.3em;
+        '>
+        {text}
+        </div>
+        """
+
+    def format_paragraph(self, text: str):
+        return f"""
+        <div style='
+            margin: 8px 0;
+            line-height: 1.6;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            color: #24292e;
+            text-align: justify;
+        '>
+        {text}
+        </div>
+        """
+
+    def format_list_item(self, text: str):
+        text = text.lstrip('- ').lstrip('* ')
+        return f"""
+        <div style='
+            margin: 4px 0 4px 20px;
+            line-height: 1.6;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            color: #24292e;
+        '>
+        • {text}
+        </div>
+        """
+
+    def format_blockquote(self, text: str):
+        text = text.lstrip('>').strip()
+        return f"""
+        <div style='
+            margin: 8px 0;
+            padding: 0 16px;
+            color: #6a737d;
+            border-left: 4px solid #dfe2e5;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            font-style: italic;
+            line-height: 1.6;
+        '>
+        {text}
+        </div>
+        """
+
+    @pyqtSlot(str)
+    def update_terminal_console(self, message):
+        self.terminal_console.append(message)
+
+    def load_file(self):
+        options = QFileDialog.Option.ReadOnly
+        file_name, _ = QFileDialog.getOpenFileName(self, "Select File", "", "All Files (*)", options=options)
+        if file_name:
+            try:
+                with open(file_name, 'r', encoding='utf-8') as file:
+                    self.loaded_file_content = file.read()
+                self.input_prompt.setPlainText(self.loaded_file_content)
+                self.terminal_console.append(f"File '{os.path.basename(file_name)}' loaded successfully.")
+            except Exception as e:
+                self.terminal_console.append(f"Error loading file: {str(e)}")
+
+    def access_knowledge_base(self):
+        dialog = KnowledgeBaseDialog(self.rag_handler, self)
+        dialog.exec()
+
+        # Update the knowledge base path in the main window after dialog closes
+        current_kb_path = self.rag_handler.get_knowledge_base_path()
+        if current_kb_path:
+            self.terminal_console.append(f"Current knowledge base path: {current_kb_path}")
+
+    def save_to_json(self):
+        config = {
+            'agent_count': self.agent_count.value(),
+            'general_instructions': self.general_instructions.toPlainText(),
+            'knowledge_base_path': self.rag_handler.get_knowledge_base_path(),  # Add this line
+            'agents': []
+        }
+
+        for agent_config in self.agent_configs:
+            config['agents'].append({
+                'provider': agent_config.provider_combo.currentText(),
+                'model': agent_config.model_combo.currentText(),
+                'instructions': agent_config.instructions.toPlainText()
+            })
+
+        options = QFileDialog.Option.DontUseNativeDialog
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Configuration", "", "JSON Files (*.json)", options=options)
+        if file_name:
+            try:
+                with open(file_name, 'w', encoding='utf-8') as file:
+                    json.dump(config, file, indent=4)
+                self.terminal_console.append(f"Configuration saved to '{os.path.basename(file_name)}'.")
+            except Exception as e:
+                self.terminal_console.append(f"Error saving configuration: {str(e)}")
+
+
+    def load_from_json(self):
+        options = QFileDialog.Option.ReadOnly
+        file_name, _ = QFileDialog.getOpenFileName(
+            self, "Load Configuration", "", "JSON Files (*.json)", options=options)
+
+        if not file_name:
+            return
+
+        try:
+            with open(file_name, 'r', encoding='utf-8') as file:
+                config = json.load(file)
+
+            # Validate required fields
+            required_fields = ['agent_count', 'general_instructions', 'agents']
+            if not all(field in config for field in required_fields):
+                raise ValueError("Invalid configuration file: missing required fields")
+
+            # Update agent count first
+            agent_count = config.get('agent_count', 1)
+            if not isinstance(agent_count, int) or agent_count < 1:
+                raise ValueError("Invalid agent count")
+
+            self.agent_count.setValue(agent_count)  # This triggers update_agent_config
+
+            # Set general instructions
+            general_instructions = config.get('general_instructions', '')
+            self.general_instructions.setPlainText(general_instructions)
+
+            # Handle knowledge base path if present
+            kb_path = config.get('knowledge_base_path')
+            if kb_path:
+                reply = QMessageBox.question(
+                    self,
+                    'Knowledge Base Path',
+                    f'Use saved knowledge base path:\n{kb_path}\n\nWould you like to use this path or select a new one?',
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+
+                if reply == QMessageBox.StandardButton.No:
+                    new_path = QFileDialog.getExistingDirectory(
+                        self,
+                        "Select Knowledge Base Directory",
+                        "",
+                        QFileDialog.Option.ShowDirsOnly
+                    )
+                    if new_path:
+                        kb_path = new_path
+                    else:
+                        kb_path = None
+
+                if kb_path:
+                    try:
+                        self.rag_handler.set_knowledge_base_path(kb_path)
+                        self.terminal_console.append(f"Knowledge base path set to: {kb_path}")
+                    except Exception as e:
+                        self.terminal_console.append(f"Error setting knowledge base path: {str(e)}")
+
+            # Update agent configurations
+            agents_data = config.get('agents', [])
+            for idx, agent_data in enumerate(agents_data):
+                if idx < len(self.agent_configs):
+                    try:
+                        agent_config = self.agent_configs[idx]
+
+                        # Get values with defaults
+                        provider = agent_data.get('provider', 'OpenAI')
+                        model = agent_data.get('model', 'gpt-4')
+                        instructions = agent_data.get('instructions', '')
+
+                        # Get available providers from combo box
+                        available_providers = [agent_config.provider_combo.itemText(i)
+                                            for i in range(agent_config.provider_combo.count())]
+
+                        # Update provider if it's available
+                        if provider in available_providers:
+                            agent_config.provider_combo.setCurrentText(provider)
+
+                            # Wait for the model list to update
+                            QTimer.singleShot(100, lambda ac=agent_config, m=model:
+                                self._update_model_selection(ac, m))
+
+                        # Set instructions
+                        agent_config.instructions.setPlainText(instructions)
+
+                    except Exception as e:
+                        self.terminal_console.append(f"Error configuring agent {idx + 1}: {str(e)}")
+
+            self.terminal_console.append(
+                f"Configuration loaded successfully from '{os.path.basename(file_name)}'")
+
+        except json.JSONDecodeError as e:
+            self.terminal_console.append(f"Error: Invalid JSON file format - {str(e)}")
+            QMessageBox.critical(self, "Error", "Invalid JSON file format")
+        except ValueError as e:
+            self.terminal_console.append(f"Error: {str(e)}")
+            QMessageBox.critical(self, "Error", str(e))
+        except Exception as e:
+            self.terminal_console.append(f"Error loading configuration: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to load configuration: {str(e)}")
+
+    def _update_model_selection(self, agent_config, model):
+        """Helper method to update model selection after provider update"""
+        available_models = [agent_config.model_combo.itemText(i)
+                        for i in range(agent_config.model_combo.count())]
+        if model in available_models:
+            agent_config.model_combo.setCurrentText(model)
+
+    def start_agent_discussion(self):
+    # Stop existing worker thread if
+    # Stop existing worker thread if it's running
+        if self.worker_thread and self.worker_thread.isRunning():
+            self.worker.stop()
+            self.worker_thread.quit()
+            self.worker_thread.wait()
+
+        # Create a new worker and thread
+        self.worker = Worker(...)
+        self.worker_thread = QThread()
+        self.worker.moveToThread(self.worker_thread)
+
+        # Connect signals and slots
+        self.worker_thread.started.connect(self.worker.start_agent_discussion)
+        self.worker.finished.connect(self.worker_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.worker_thread.finished.connect(self.worker_thread.deleteLater)
+
+        # Start the thread
+        self.worker_thread.start()
+
+    def closeEvent(self, event):
+        # Stop the worker thread on application exit
+        if self.worker_thread and self.worker_thread.isRunning():
+            self.worker.stop()
+            self.worker_thread.quit()
+            self.worker_thread.wait()
+        event.accept()
+
+    def create_icon_button(self, icon_name, tooltip):
+        """Helper method to create icon-based buttons"""
+        button = QToolButton()
+        button.setIcon(QIcon(f"icons/{icon_name}"))  # Assuming icons are in an 'icons' folder
+        button.setToolTip(tooltip)
+        button.setIconSize(QSize(24, 24))
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        return button
+
+
+if __name__ == '__main__':
+    try:
+        app = QApplication(sys.argv)
+        app.setStyle('Fusion')  # Consistent look across platforms
+
+        # Set light mode palette for the entire application
+        palette = app.palette()
+        palette.setColor(palette.ColorRole.Window, Qt.GlobalColor.white)
+        palette.setColor(palette.ColorRole.WindowText, Qt.GlobalColor.black)
+        palette.setColor(palette.ColorRole.Base, Qt.GlobalColor.white)
+        palette.setColor(palette.ColorRole.AlternateBase, Qt.GlobalColor.lightGray)
+        palette.setColor(palette.ColorRole.ToolTipBase, Qt.GlobalColor.white)
+        palette.setColor(palette.ColorRole.ToolTipText, Qt.GlobalColor.black)
+        palette.setColor(palette.ColorRole.Text, Qt.GlobalColor.black)
+        palette.setColor(palette.ColorRole.Button, Qt.GlobalColor.lightGray)
+        palette.setColor(palette.ColorRole.ButtonText, Qt.GlobalColor.black)
+        palette.setColor(palette.ColorRole.BrightText, Qt.GlobalColor.red)
+        palette.setColor(palette.ColorRole.Link, Qt.GlobalColor.blue)
+        palette.setColor(palette.ColorRole.Highlight, Qt.GlobalColor.blue)
+        palette.setColor(palette.ColorRole.HighlightedText, Qt.GlobalColor.white)
+        app.setPalette(palette)
+
+        main_window = MainWindow()
+        main_window.show()
+        sys.exit(app.exec())
+        save_code_to_pdf()
+        main()
+    except Exception as e:
+        print(f"Fatal error: {str(e)}")
+        sys.exit(1)

@@ -1,0 +1,16 @@
+{
+  "provider": "Google GenAI",
+  "model": "gemini-2.5-pro-preview-06-05",
+  "context_window": 1048576,
+  "temperature": 1.0,
+  "top_p": 0.95,
+  "top_k": 40,
+  "max_tokens": 16000,
+  "frequency_penalty": 0.0,
+  "presence_penalty": 0.0,
+  "repetition_penalty": 1.0,
+  "stop_sequences": [],
+  "streaming_enabled": true,
+  "thinking_enabled": true,
+  "thinking_budget": -1
+}

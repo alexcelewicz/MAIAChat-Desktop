@@ -1,0 +1,13 @@
+{
+  "provider": "LM Studio",
+  "model": "deepseek-r1-0528-qwen3-8b",
+  "temperature": 0.5,
+  "top_p": 0.9,
+  "top_k": 40,
+  "max_tokens": 32768,
+  "frequency_penalty": 0.0,
+  "presence_penalty": 0.0,
+  "repetition_penalty": 1.0,
+  "stop_sequences": [],
+  "streaming_enabled": true
+}

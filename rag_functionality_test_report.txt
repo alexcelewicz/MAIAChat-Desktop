@@ -1,0 +1,14 @@
+RAG FUNCTIONALITY TEST REPORT
+==================================================
+Total Tests: 6
+Passed: 6
+Failed: 0
+Warnings: 0
+
+Detailed Results:
+PASS RAG Handler Initialization: PASS - Loaded 9980 chunks
+PASS RAG Settings Verification: PASS - Settings verified
+PASS Basic Retrieval Test: PASS - 5/5 queries successful, avg 26.8 chunks
+PASS Quality Improvement Test: PASS - 100.0% improvement in chunk retrieval
+PASS AMD Optimization Test: PASS - AMD optimizations working correctly
+PASS Performance Monitoring: PASS - EXCELLENT performance: 1.86s avg

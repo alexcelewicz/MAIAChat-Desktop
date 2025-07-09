@@ -1,0 +1,14 @@
+{
+  "provider": "Anthropic",
+  "model": "claude-3-7-sonnet-20250219",
+  "context_window": 200000,
+  "temperature": 0.6,
+  "top_p": 0.9,
+  "top_k": 40,
+  "max_tokens": 32768,
+  "frequency_penalty": 0.0,
+  "presence_penalty": 0.0,
+  "repetition_penalty": 1.0,
+  "stop_sequences": [],
+  "streaming_enabled": true
+}

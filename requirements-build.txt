@@ -1,0 +1,11 @@
+# Build requirements for creating executable
+pyinstaller>=5.0.0
+pyinstaller-hooks-contrib>=2023.0
+
+# Include all runtime requirements
+-r requirements.txt
+
+# Additional build tools (optional)
+# Note: auto-py-to-exe and UPX are optional tools that can be installed separately if needed
+# auto-py-to-exe provides a GUI for PyInstaller
+# UPX provides executable compression but must be installed separately from https://upx.github.io/ 

@@ -1,0 +1,90 @@
+[
+  {
+    "name": "Brave Search",
+    "url": "https://api.search.brave.com/res/v1/web/search",
+    "description": "Search the web with Brave Search API",
+    "enabled": false,
+    "auth_token": "your_brave_search_api_key_here",
+    "capabilities": [
+      "web_search",
+      "image_search",
+      "news_search"
+    ],
+    "cx": ""
+  },
+  {
+    "name": "Google Search",
+    "url": "https://www.googleapis.com/customsearch/v1",
+    "description": "Search the web with Google Custom Search API",
+    "enabled": false,
+    "auth_token": "your_google_api_key_here",
+    "capabilities": [
+      "web_search",
+      "image_search",
+      "news_search"
+    ],
+    "cx": "your_google_search_engine_id_here"
+  },
+  {
+    "name": "Local Files",
+    "url": "filesystem://local",
+    "description": "Access and manipulate files on your computer",
+    "enabled": true,
+    "auth_token": "",
+    "capabilities": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "create_directory",
+      "list_directory",
+      "move_file",
+      "search_files",
+      "get_file_info"
+    ],
+    "cx": ""
+  },
+  {
+    "name": "Filesystem",
+    "url": "filesystem://local",
+    "description": "Access local files within allowed directories.",
+    "enabled": true,
+    "auth_token": "",
+    "capabilities": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "create_directory",
+      "list_directory",
+      "move_file",
+      "search_files",
+      "get_file_info",
+      "list_allowed_directories"
+    ],
+    "cx": ""
+  },
+  {
+    "name": "Serper Search",
+    "url": "https://api.serper.dev/search",
+    "description": "Serper Search API - Fast and reliable web search",
+    "enabled": false,
+    "auth_token": "your_serper_api_key_here",
+    "capabilities": [
+      "web_search",
+      "news_search",
+      "image_search"
+    ],
+    "cx": ""
+  },
+  {
+    "name": "GitHub",
+    "url": "https://api.github.com",
+    "description": "GitHub API for repository access (requires Personal Access Token)",
+    "enabled": false,
+    "auth_token": "your_github_personal_access_token_here",
+    "capabilities": [
+      "public_repo_access",
+      "repository_search"
+    ],
+    "cx": ""
+  }
+]

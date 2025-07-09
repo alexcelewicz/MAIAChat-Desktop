@@ -1,0 +1,51 @@
+[
+  {
+    "name": "GitHub",
+    "url": "https://api.github.com",
+    "description": "Access GitHub repositories, issues, and pull requests",
+    "enabled": true,
+    "auth_token": "",
+    "capabilities": [],
+    "cx": ""
+  },
+  {
+    "name": "Google Search",
+    "url": "https://www.googleapis.com/customsearch/v1",
+    "description": "Search the web with Google Custom Search API (Requires API Key and CX)",
+    "enabled": true,
+    "auth_token": "",
+    "capabilities": [],
+    "cx": ""
+  },
+  {
+    "name": "Brave Search",
+    "url": "https://api.search.brave.com/res/v1/web/search",
+    "description": "Search the web with Brave Search",
+    "enabled": true,
+    "auth_token": "",
+    "capabilities": [],
+    "cx": ""
+  },
+  {
+    "name": "Context7",
+    "url": "https://api.context7.com/v1",
+    "description": "Access up-to-date documentation and code examples for popular libraries (Requires API Key)",
+    "enabled": true,
+    "auth_token": "",
+    "capabilities": [
+      "documentation",
+      "code_examples",
+      "api_reference"
+    ],
+    "cx": ""
+  },
+  {
+    "name": "Serper Search",
+    "url": "https://api.serper.dev/search",
+    "description": "Fast and affordable Google Search API alternative (Requires API Key)",
+    "enabled": true,
+    "auth_token": "",
+    "capabilities": [],
+    "cx": ""
+  }
+]

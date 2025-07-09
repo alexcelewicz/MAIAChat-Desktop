@@ -1,0 +1,22 @@
+{
+  "/path/to/your/project": {
+    "read_file": true,
+    "write_file": true,
+    "edit_file": true,
+    "create_directory": true,
+    "list_directory": true,
+    "move_file": true,
+    "search_files": true,
+    "get_file_info": true
+  },
+  "/path/to/your/documents": {
+    "read_file": true,
+    "write_file": true,
+    "edit_file": true,
+    "create_directory": true,
+    "list_directory": true,
+    "move_file": false,
+    "search_files": true,
+    "get_file_info": true
+  }
+}

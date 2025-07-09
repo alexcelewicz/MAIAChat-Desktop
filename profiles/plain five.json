@@ -1,0 +1,39 @@
+{
+    "name": "Plain Five",
+    "description": "A simple five-agent team with different providers and models.",
+    "general_instructions": "",
+    "agents": [
+        {
+            "provider": "OpenAI",
+            "model": "gpt-4o-mini",
+            "instructions": "",
+            "agent_number": 1
+        },
+        {
+            "provider": "Google GenAI",
+            "model": "gemini-exp-1206",
+            "instructions": "",
+            "agent_number": 2
+        },
+        {
+            "provider": "Anthropic",
+            "model": "claude-3-5-sonnet-20241022",
+            "instructions": "",
+            "agent_number": 3
+        },
+        {
+            "provider": "Groq",
+            "model": "llama-3.3-70b-versatile",
+            "instructions": "",
+            "agent_number": 4
+        },
+        {
+            "provider": "DeepSeek",
+            "model": "deepseek-chat",
+            "instructions": "",
+            "agent_number": 5
+        }
+    ],
+    "internet_enabled": false,
+    "mcp_enabled": false
+}

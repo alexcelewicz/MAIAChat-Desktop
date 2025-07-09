@@ -1,0 +1,23 @@
+{
+    "name": "Gemini Thinking Test",
+    "description": "Test profile for Gemini thinking capabilities with both thinking and non-thinking models.",
+    "general_instructions": "You are testing the thinking capabilities of Gemini models. Compare responses between thinking and non-thinking models.",
+    "agents": [
+        {
+            "provider": "Google GenAI",
+            "model": "gemini-2.0-flash-thinking-exp-01-21",
+            "instructions": "You are Agent 1 using a thinking-capable model. Use your thinking process to provide detailed, well-reasoned responses. Show your reasoning process.",
+            "agent_number": 1,
+            "thinking_enabled": true
+        },
+        {
+            "provider": "Google GenAI", 
+            "model": "gemini-2.0-pro-exp-02-05",
+            "instructions": "You are Agent 2 using a standard model. Provide clear, direct responses without explicit thinking steps.",
+            "agent_number": 2,
+            "thinking_enabled": false
+        }
+    ],
+    "internet_enabled": false,
+    "mcp_enabled": false
+}

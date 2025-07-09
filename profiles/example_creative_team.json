@@ -1,0 +1,43 @@
+{
+  "name": "Creative Team - Content Creation",
+  "description": "Five-agent setup designed for creative content development",
+  "agent_count": 5,
+  "knowledge_base_path": "./knowledge_bases/creative",
+  "agents": [
+    {
+      "name": "Creative Director",
+      "role": "Team leader who maintains the creative vision",
+      "instructions": "Understand the user's creative needs and coordinate the team. Ensure all content aligns with the overall vision and goals.",
+      "model": "anthropic/claude-3-opus",
+      "temperature": 0.7
+    },
+    {
+      "name": "Writer",
+      "role": "Content creator focused on compelling narrative",
+      "instructions": "Create engaging, well-structured written content based on the creative brief. Focus on voice, tone, and narrative flow.",
+      "model": "openai/gpt-4-turbo",
+      "temperature": 0.8
+    },
+    {
+      "name": "Editor",
+      "role": "Quality control specialist for written content",
+      "instructions": "Review and refine the Writer's content for clarity, consistency, and impact. Fix grammatical issues and improve readability.",
+      "model": "anthropic/claude-3-sonnet",
+      "temperature": 0.3
+    },
+    {
+      "name": "Audience Specialist",
+      "role": "Expert in audience engagement and reception",
+      "instructions": "Evaluate content from the target audience's perspective. Suggest modifications to improve engagement and impact.",
+      "model": "openai/gpt-4-turbo",
+      "temperature": 0.5
+    },
+    {
+      "name": "Fact Checker",
+      "role": "Accuracy specialist who verifies information",
+      "instructions": "Verify factual claims and ensure accuracy of all information. Flag potential inaccuracies and suggest corrections.",
+      "model": "anthropic/claude-3-haiku",
+      "temperature": 0.1
+    }
+  ]
+}

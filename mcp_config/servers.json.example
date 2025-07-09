@@ -1,0 +1,65 @@
+[
+  {
+    "name": "Brave Search",
+    "url": "https://api.search.brave.com/res/v1/web/search",
+    "description": "Search the web with Brave Search",
+    "enabled": false,
+    "auth_token": "your_brave_search_api_key_here",
+    "capabilities": [
+      "web_search",
+      "image_search",
+      "news_search"
+    ],
+    "cx": ""
+  },
+  {
+    "name": "Local Files",
+    "url": "filesystem://your_project_directory",
+    "description": "Access and manipulate files in your project directory",
+    "enabled": true,
+    "auth_token": "",
+    "capabilities": [
+      "list_directory",
+      "read_file",
+      "get_file_info",
+      "search_files",
+      "write_file",
+      "delete_file"
+    ],
+    "cx": "",
+    "server_type": "filesystem",
+    "config_data": {
+      "allowed_directory": "/path/to/your/project",
+      "max_file_size": 10,
+      "read_only": false,
+      "enable_logging": true
+    }
+  },
+  {
+    "name": "GitHub",
+    "url": "https://api.github.com",
+    "description": "GitHub API. Use PAT in token for private access.",
+    "enabled": false,
+    "auth_token": "your_github_personal_access_token_here",
+    "capabilities": [
+      "public_repo_access"
+    ],
+    "cx": ""
+  },
+  {
+    "name": "Test Local Files",
+    "url": "local://filesystem",
+    "description": "Test filesystem server for PDF operations",
+    "enabled": false,
+    "auth_token": "",
+    "capabilities": [],
+    "cx": "",
+    "server_type": "filesystem",
+    "config_data": {
+      "allowed_directory": "/path/to/your/temp/directory",
+      "max_file_size": 50,
+      "read_only": false,
+      "enable_logging": true
+    }
+  }
+]

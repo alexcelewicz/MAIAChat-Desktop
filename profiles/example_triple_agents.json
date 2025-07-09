@@ -1,0 +1,29 @@
+{
+  "name": "Triple Agents - Full Development Team",
+  "description": "Three-agent setup simulating a complete development team for complex projects",
+  "agent_count": 3,
+  "knowledge_base_path": "./knowledge_bases/programming",
+  "agents": [
+    {
+      "name": "Architect",
+      "role": "System architect responsible for high-level design",
+      "instructions": "Design the overall architecture and component structure. Consider scalability, maintainability, and performance requirements.",
+      "model": "anthropic/claude-3-opus",
+      "temperature": 0.2
+    },
+    {
+      "name": "Developer",
+      "role": "Implementation specialist who writes the actual code",
+      "instructions": "Implement the architecture designed by the Architect. Write clean, efficient code following best practices.",
+      "model": "openai/gpt-4-turbo",
+      "temperature": 0.3
+    },
+    {
+      "name": "Tester",
+      "role": "QA engineer focused on testing and edge cases",
+      "instructions": "Review the implementation for bugs, edge cases, and performance issues. Suggest test cases and improvements.",
+      "model": "anthropic/claude-3-sonnet",
+      "temperature": 0.1
+    }
+  ]
+}

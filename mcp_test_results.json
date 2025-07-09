@@ -1,0 +1,72 @@
+{
+  "timestamp": "2025-06-19 12:19:04",
+  "server_tested": "Local Files",
+  "total_tests": 9,
+  "passed_tests": 9,
+  "success_rate": "100.0%",
+  "detailed_results": [
+    {
+      "test": "Server Configuration",
+      "status": "\u2705 PASS",
+      "details": "Server properly configured with 6 capabilities",
+      "error": null,
+      "timestamp": "12:18:57"
+    },
+    {
+      "test": "List Directory",
+      "status": "\u2705 PASS",
+      "details": "Found 164 items (total: 164), snake.py found",
+      "error": null,
+      "timestamp": "12:18:57"
+    },
+    {
+      "test": "Read File",
+      "status": "\u2705 PASS",
+      "details": "Read 9420 characters, valid Python code detected",
+      "error": null,
+      "timestamp": "12:18:57"
+    },
+    {
+      "test": "Write File",
+      "status": "\u2705 PASS",
+      "details": "Created mcp_test_file.txt (90 bytes)",
+      "error": null,
+      "timestamp": "12:18:57"
+    },
+    {
+      "test": "Get File Info",
+      "status": "\u2705 PASS",
+      "details": "Type: file, Size: 9682 bytes",
+      "error": null,
+      "timestamp": "12:18:57"
+    },
+    {
+      "test": "Search Files",
+      "status": "\u2705 PASS",
+      "details": "Found 19097 Python files, snake.py included",
+      "error": null,
+      "timestamp": "12:18:58"
+    },
+    {
+      "test": "Delete File",
+      "status": "\u2705 PASS",
+      "details": "Successfully deleted mcp_test_file.txt",
+      "error": null,
+      "timestamp": "12:18:58"
+    },
+    {
+      "test": "Error Handling",
+      "status": "\u2705 PASS",
+      "details": "Properly returned error: File not found",
+      "error": null,
+      "timestamp": "12:18:58"
+    },
+    {
+      "test": "Result Formatting",
+      "status": "\u2705 PASS",
+      "details": "Proper formatting with icons and structure",
+      "error": null,
+      "timestamp": "12:19:04"
+    }
+  ]
+}

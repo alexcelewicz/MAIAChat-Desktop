@@ -1,0 +1,39 @@
+{
+    "name": "Five Same",
+    "description": "Five agents with the same instructions but different providers and models.",
+    "general_instructions": "Answer questions using all the facts gathered",
+    "agents": [
+        {
+            "provider": "OpenAI",
+            "model": "gpt-4o-mini",
+            "instructions": "Provide comprehensive response to user question",
+            "agent_number": 1
+        },
+        {
+            "provider": "Google GenAI",
+            "model": "gemini-exp-1206",
+            "instructions": "Provide comprehensive response to user question",
+            "agent_number": 2
+        },
+        {
+            "provider": "Anthropic",
+            "model": "claude-3-5-sonnet-20241022",
+            "instructions": "Provide comprehensive response to user question",
+            "agent_number": 3
+        },
+        {
+            "provider": "Groq",
+            "model": "llama-3.3-70b-versatile",
+            "instructions": "Provide comprehensive response to user question",
+            "agent_number": 4
+        },
+        {
+            "provider": "Ollama",
+            "model": "gemma2:2b",
+            "instructions": "Provide comprehensive response to user question",
+            "agent_number": 5
+        }
+    ],
+    "internet_enabled": false,
+    "mcp_enabled": false
+}

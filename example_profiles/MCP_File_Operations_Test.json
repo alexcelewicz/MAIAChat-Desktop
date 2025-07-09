@@ -1,0 +1,26 @@
+{
+    "name": "MCP File Operations Test",
+    "description": "A two-agent setup for testing Model Context Protocol (MCP) file operations with Claude models that handle MCP context effectively.",
+    "agent_count": 2,
+    "general_instructions": "Test MCP file operations with Claude models that handle MCP context better than other providers. This profile demonstrates file reading, analysis, and writing capabilities through MCP.",
+    "knowledge_base_path": "knowledge_base",
+    "mcp_enabled": true,
+    "agents": [
+        {
+            "provider": "Anthropic",
+            "model": "claude-3-5-sonnet-20241022",
+            "instructions": "You are Agent 1: MCP File Reader and Analyzer. Use MCP to read files and describe what you find.\n\nIMPORTANT: Use this exact syntax for file operations:\n[MCP:Local Files:read_file:/path/to/your/file.py]\n\nAfter reading, provide a brief analysis of the code structure and suggest one improvement. Focus on code quality, structure, and best practices.",
+            "thinking_enabled": false,
+            "mcp_enabled": true,
+            "agent_number": 1
+        },
+        {
+            "provider": "Anthropic", 
+            "model": "claude-3-5-sonnet-20241022",
+            "instructions": "You are Agent 2: MCP File Writer and Improver. Based on Agent 1's analysis, use MCP to write an improved version of the file.\n\nIMPORTANT: Use this exact syntax for file operations:\n[MCP:Local Files:write_file:/path/to/your/file.py:COMPLETE_IMPROVED_CODE_HERE]\n\nMake meaningful improvements like adding input validation, error handling, documentation, or better structure based on the analysis from Agent 1.",
+            "thinking_enabled": false,
+            "mcp_enabled": true,
+            "agent_number": 2
+        }
+    ]
+}

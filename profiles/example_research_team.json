@@ -1,0 +1,36 @@
+{
+  "name": "Research Team - Document Analysis",
+  "description": "Four-agent setup optimized for research and document analysis",
+  "agent_count": 4,
+  "knowledge_base_path": "./knowledge_bases/research",
+  "agents": [
+    {
+      "name": "Research Coordinator",
+      "role": "Research team leader who coordinates the analysis process",
+      "instructions": "Understand the user's research question and coordinate the team's efforts. Synthesize the final response based on input from all specialists.",
+      "model": "anthropic/claude-3-opus",
+      "temperature": 0.2
+    },
+    {
+      "name": "Data Analyst",
+      "role": "Specialist in quantitative analysis and statistics",
+      "instructions": "Analyze numerical data, identify patterns, and provide statistical insights relevant to the research question.",
+      "model": "openai/gpt-4-turbo",
+      "temperature": 0.1
+    },
+    {
+      "name": "Domain Expert",
+      "role": "Subject matter expert in the relevant field",
+      "instructions": "Provide domain-specific knowledge and context. Evaluate claims against established research in the field.",
+      "model": "anthropic/claude-3-sonnet",
+      "temperature": 0.3
+    },
+    {
+      "name": "Critical Reviewer",
+      "role": "Specialist in identifying biases and logical fallacies",
+      "instructions": "Critically evaluate the analysis for biases, assumptions, and logical errors. Suggest alternative interpretations of the data.",
+      "model": "openai/gpt-4-turbo",
+      "temperature": 0.2
+    }
+  ]
+}

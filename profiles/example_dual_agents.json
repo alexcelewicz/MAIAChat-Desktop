@@ -1,0 +1,22 @@
+{
+  "name": "Dual Agents - Developer & Reviewer",
+  "description": "Two-agent setup with a developer and code reviewer for higher quality solutions",
+  "agent_count": 2,
+  "knowledge_base_path": "./knowledge_bases/programming",
+  "agents": [
+    {
+      "name": "Developer",
+      "role": "Senior software engineer focused on implementation",
+      "instructions": "Create efficient, well-structured code solutions based on user requirements. Focus on readability, performance, and best practices.",
+      "model": "openai/gpt-4-turbo",
+      "temperature": 0.3
+    },
+    {
+      "name": "Code Reviewer",
+      "role": "Quality assurance engineer with security expertise",
+      "instructions": "Review the Developer's code for bugs, security issues, and optimization opportunities. Suggest improvements and identify potential edge cases.",
+      "model": "anthropic/claude-3-opus",
+      "temperature": 0.1
+    }
+  ]
+}

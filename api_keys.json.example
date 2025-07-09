@@ -1,0 +1,98 @@
+{
+  "OPENAI_API_KEY": {
+    "id": "OPENAI_API_KEY",
+    "name": "OpenAI API Key",
+    "description": "API key for OpenAI GPT models (GPT-4, GPT-3.5-turbo, etc.)",
+    "url": "https://platform.openai.com/api-keys",
+    "required": false,
+    "category": "AI Providers"
+  },
+  "ANTHROPIC_API_KEY": {
+    "id": "ANTHROPIC_API_KEY",
+    "name": "Anthropic API Key",
+    "description": "API key for Anthropic Claude models",
+    "url": "https://console.anthropic.com/",
+    "required": false,
+    "category": "AI Providers"
+  },
+  "GEMINI_API_KEY": {
+    "id": "GEMINI_API_KEY",
+    "name": "Google Gemini API Key",
+    "description": "API key for Google Gemini models",
+    "url": "https://makersuite.google.com/app/apikey",
+    "required": false,
+    "category": "AI Providers"
+  },
+  "GROQ_API_KEY": {
+    "id": "GROQ_API_KEY",
+    "name": "Groq API Key",
+    "description": "API key for Groq fast inference models",
+    "url": "https://console.groq.com/keys",
+    "required": false,
+    "category": "AI Providers"
+  },
+  "GROK_API_KEY": {
+    "id": "GROK_API_KEY",
+    "name": "xAI Grok API Key",
+    "description": "API key for xAI Grok models",
+    "url": "https://console.x.ai/",
+    "required": false,
+    "category": "AI Providers"
+  },
+  "DEEPSEEK_API_KEY": {
+    "id": "DEEPSEEK_API_KEY",
+    "name": "DeepSeek API Key",
+    "description": "API key for DeepSeek models",
+    "url": "https://platform.deepseek.com/api_keys",
+    "required": false,
+    "category": "AI Providers"
+  },
+  "OPENROUTER_API_KEY": {
+    "id": "OPENROUTER_API_KEY",
+    "name": "OpenRouter API Key",
+    "description": "API key for OpenRouter (access to multiple AI models)",
+    "url": "https://openrouter.ai/keys",
+    "required": false,
+    "category": "AI Providers"
+  },
+  "REQUESTY_API_KEY": {
+    "id": "REQUESTY_API_KEY",
+    "name": "Requesty API Key",
+    "description": "API key for Requesty service",
+    "url": "https://requesty.ai/",
+    "required": false,
+    "category": "AI Providers"
+  },
+  "GOOGLE_API_KEY": {
+    "id": "GOOGLE_API_KEY",
+    "name": "Google API Key",
+    "description": "API key for Google services (Search, etc.)",
+    "url": "https://console.developers.google.com/",
+    "required": false,
+    "category": "Search Providers"
+  },
+  "GOOGLE_SEARCH_ENGINE_ID": {
+    "id": "GOOGLE_SEARCH_ENGINE_ID",
+    "name": "Google Search Engine ID",
+    "description": "Custom Search Engine ID for Google Search",
+    "url": "https://programmablesearchengine.google.com/",
+    "required": false,
+    "category": "Search Providers"
+  },
+  "SERPER_API_KEY": {
+    "id": "SERPER_API_KEY",
+    "name": "Serper API Key",
+    "description": "API key for Serper search service",
+    "url": "https://serper.dev/",
+    "required": false,
+    "category": "Search Providers"
+  },
+  "BRAVE_SEARCH_API_KEY": {
+    "id": "BRAVE_SEARCH_API_KEY",
+    "name": "Brave Search API Key",
+    "description": "API key for Brave Search API",
+    "url": "https://api.search.brave.com/",
+    "required": false,
+    "category": "Search Providers"
+  }
+}

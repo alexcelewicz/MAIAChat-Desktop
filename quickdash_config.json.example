@@ -1,0 +1,7 @@
+{
+    "(0, 0)": {
+        "name": "example_item",
+        "path": "\"/path/to/your/file.html\"",
+        "icon": "/path/to/your/icon.png"
+    }
+}

@@ -1,0 +1,50 @@
+# Core dependencies
+PyQt6>=6.4.0
+python-dotenv>=1.0.0
+
+# NLP and ML
+sentence-transformers>=3.3.0
+torch>=2.5.1
+transformers>=4.46.2
+numpy>=2.0.2
+scikit-learn>=1.5.2
+faiss-cpu>=1.7.4  # or faiss-gpu if you have CUDA support
+rank_bm25>=0.2.2
+
+# Document processing
+chromadb>=0.4.24
+beautifulsoup4>=4.12.0
+python-docx>=1.0.0
+PyMuPDF>=1.23.0  # for PDF processing
+pdfplumber>=0.10.0
+pandas>=2.0.0
+nltk>=3.8.1
+openpyxl>=3.1.2  # for Excel file support
+html2text>=2020.1.16
+
+# API Clients
+openai>=1.12.0
+google-cloud-aiplatform>=1.38.0
+anthropic>=0.18.0
+google-generativeai>=0.3.0
+google-api-python-client>=2.100.0  # for Google search API
+
+# Utilities
+tqdm>=4.67.0
+requests>=2.32.0
+chardet>=5.2.0
+tiktoken>=0.5.1  # for token counting
+
+# Optional dependencies
+aiohttp>=3.8.1  # For async HTTP requests
+asyncio>=3.4.3  # For async programming
+pytest>=7.1.2  # For testing
+pytest-asyncio>=0.18.3  # For async testing
+python-frontmatter
+
+# Additional dependencies from TODO.md
+pygments>=2.18.0  # For py_to_pdf_converter syntax highlighting
+langdetect>=1.0.9  # For rag_handler language detection
+keyring>=24.3.0  # For secure_key_manager
+black>=24.1.0  # For code formatting
+autopep8>=1.7.0  # For code formatting
