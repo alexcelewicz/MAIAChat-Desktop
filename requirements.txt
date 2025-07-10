@@ -48,3 +48,4 @@ langdetect>=1.0.9  # For rag_handler language detection
 keyring>=24.3.0  # For secure_key_manager
 black>=24.1.0  # For code formatting
 autopep8>=1.7.0  # For code formatting
+reportlab>=3.0.0  # For report generation

@@ -570,7 +570,11 @@ class Worker(QObject):
                 result_queue = queue.Queue()
 
                 def process_agent_with_timeout():
-
+                    # Check if this agent should still be processed
+                    if not self.is_running:
+                        result_queue.put(('cancelled', 'Agent processing was cancelled'))
+                        return
+                    
                     try:
                         agent_response = self.get_agent_response(
                             agent['provider'],
@@ -585,7 +589,7 @@ class Worker(QObject):
                 # Start the agent processing in a separate thread
                 self.current_agent_last_activity_time = time.time() # Initialize for inactivity tracking
                 agent_thread = threading.Thread(target=process_agent_with_timeout)
-                agent_thread.daemon = True # Ensures thread doesn't block app exit
+                agent_thread.daemon = False # Don't make it daemon to ensure proper cleanup
                 agent_thread.start()
                 # Wait for the result with inactivity timeout and max overall timeout
                 agent_inactivity_timeout_seconds = self.config_manager.get('AGENT_INACTIVITY_TIMEOUT', 60) if self.config_manager else 60
@@ -598,6 +602,8 @@ class Worker(QObject):
                         result_type, result_value = result_queue.get(timeout=1) # Poll every 1 second
                         if result_type == 'success':
                             response = result_value
+                        elif result_type == 'cancelled':
+                            response = f"[Agent {agent_number} was cancelled]"
                         else: # 'error'
                             raise Exception(result_value)
                         response_received = True
@@ -609,19 +615,34 @@ class Worker(QObject):
                             logger.warning(f"AGENT_INACTIVITY_TIMEOUT: Agent {agent_number} detected no activity for {agent_inactivity_timeout_seconds} seconds.")
                             self.update_terminal_console_signal.emit(f"Agent {agent_number} timed out due to inactivity after {agent_inactivity_timeout_seconds} seconds. Proceeding to next agent if any.")
                             response = f"[Agent {agent_number} timed out due to inactivity after {agent_inactivity_timeout_seconds} seconds. The response may be incomplete.]"
-                            # We don't need to actively stop the daemon thread here; it will exit when its task finishes or if self.is_running becomes false.
-                            # The main goal is to stop waiting for *this* agent and move on.
+                            # Signal the agent thread to stop if possible
+                            self.is_running = False
+                            # Wait briefly for thread to finish cleanup
+                            agent_thread.join(timeout=2)
+                            self.is_running = True  # Restore running state for next agent
                             break # Exit loop on inactivity timeout
                         if current_time - start_api_call_time > agent_max_overall_timeout_seconds:
                             logger.warning(f"AGENT_MAX_OVERALL_TIMEOUT: Agent {agent_number} exceeded max overall processing time of {agent_max_overall_timeout_seconds} seconds.")
                             self.update_terminal_console_signal.emit(f"Agent {agent_number} exceeded maximum overall processing time of {agent_max_overall_timeout_seconds} seconds. Proceeding to next agent if any.")
                             response = f"[Agent {agent_number} exceeded maximum overall processing time of {agent_max_overall_timeout_seconds} seconds. The response may be incomplete.]"
+                            # Signal the agent thread to stop if possible
+                            self.is_running = False
+                            # Wait briefly for thread to finish cleanup
+                            agent_thread.join(timeout=2)
+                            self.is_running = True  # Restore running state for next agent
                             break # Exit loop on max overall timeout
                     except Exception as e: # Catch errors put into the queue by process_agent_with_timeout
                         logger.error(f"Error received from agent_thread for Agent {agent_number}: {str(e)}")
                         response = f"[Agent {agent_number} encountered an error: {str(e)}]"
                         response_received = True # Consider error as a form of "completion" for this agent's turn
                         break
+                # Ensure the thread is properly cleaned up
+                if agent_thread.is_alive():
+                    # If thread is still alive, give it a moment to finish
+                    agent_thread.join(timeout=5)
+                    if agent_thread.is_alive():
+                        logger.warning(f"Agent {agent_number} thread did not terminate gracefully after timeout")
+                        
                 if not response_received and not agent_thread.is_alive():
                     # Thread finished but didn't put anything in queue (shouldn't happen with current process_agent_with_timeout)
                     logger.warning(f"Agent {agent_number} thread finished unexpectedly without result.")
@@ -2532,11 +2553,11 @@ Please provide a response that:
                 self.current_agent_last_activity_time = time.time()
                 if self.format_response_handler:
                     formatted_html_chunk = self.format_response_handler.format_agent_response(
-                        agent_number, model, cleaned_buffer, first_chunk
+                        agent_number, model, cleaned_buffer, False
                     )
-                    self.update_agents_discussion_signal.emit(formatted_html_chunk, agent_number, model, first_chunk)
+                    self.update_agents_discussion_signal.emit(formatted_html_chunk, agent_number, model, False)
                 else:
-                    self.update_agents_discussion_signal.emit(cleaned_buffer, agent_number, model, first_chunk)
+                    self.update_agents_discussion_signal.emit(cleaned_buffer, agent_number, model, False)
 
             if not full_response.strip():
                 error_msg = "Gemini API with thinking returned empty response"
@@ -2621,11 +2642,11 @@ Please provide a response that:
                         self.current_agent_last_activity_time = time.time()
                         if self.format_response_handler:
                             formatted_html_chunk = self.format_response_handler.format_agent_response(
-                                agent_number, model, cleaned_buffer, first_chunk
+                                agent_number, model, cleaned_buffer, False
                             )
-                            self.update_agents_discussion_signal.emit(formatted_html_chunk, agent_number, model, first_chunk)
+                            self.update_agents_discussion_signal.emit(formatted_html_chunk, agent_number, model, False)
                         else:
-                            self.update_agents_discussion_signal.emit(cleaned_buffer, agent_number, model, first_chunk)
+                            self.update_agents_discussion_signal.emit(cleaned_buffer, agent_number, model, False)
                     # Check if we got any response
                     if not full_response.strip():
                         if retry_count < max_retries - 1:
@@ -2722,8 +2743,8 @@ Please provide a response that:
         settings = settings_manager.get_settings("anthropic", model)
         # Use streaming_enabled directly from these specific settings
         use_streaming = settings.streaming_enabled if settings else False
-        temperature = settings.get('temperature', 0.7) if settings else 0.7
-        top_p = settings.get('top_p', 0.9) if settings else 0.9
+        temperature = settings.temperature if settings else 0.7
+        top_p = settings.top_p if settings else 0.9
         if use_streaming:
 
             try:
